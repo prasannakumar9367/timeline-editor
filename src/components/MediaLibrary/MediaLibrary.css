@@ -1,0 +1,450 @@
+/* ─────────────────────────────────────────────
+ *  MediaLibrary Styles
+ * ───────────────────────────────────────────── */
+
+.media-lib-panel {
+  --ml-bg: #1a1a1a;
+  --ml-surface: #242424;
+  --ml-elevated: #2d2d2d;
+  --ml-border: #3a3a3a;
+  --ml-text: #e0e0e0;
+  --ml-text-muted: #888888;
+  --ml-accent: #4a9eff;
+  --ml-playhead-red: #ff4444;
+
+  width: 240px;
+  min-width: 240px;
+  max-width: 240px;
+  height: 100%;
+  background-color: var(--ml-bg);
+  border-right: 1px solid var(--ml-border);
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  user-select: none;
+  position: relative;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  color: var(--ml-text);
+  transition: border-color 0.15s ease;
+}
+
+.media-lib-panel-dragover {
+  border-right-color: var(--ml-accent);
+}
+
+/* ── Hidden File Input ── */
+.media-lib-file-input {
+  display: none;
+}
+
+/* ── Header ── */
+.media-lib-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background-color: var(--ml-bg);
+  border-bottom: 1px solid var(--ml-border);
+  flex-shrink: 0;
+  gap: 8px;
+}
+
+.media-lib-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.media-lib-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--ml-text);
+  margin: 0;
+  white-space: nowrap;
+}
+
+.media-lib-count-badge {
+  font-size: 10px;
+  color: var(--ml-text-muted);
+  background-color: var(--ml-surface);
+  border: 1px solid var(--ml-border);
+  padding: 1px 5px;
+  border-radius: 10px;
+  line-height: 1.2;
+}
+
+.media-lib-import-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background-color: var(--ml-surface);
+  border: 1px solid var(--ml-border);
+  border-radius: 4px;
+  color: var(--ml-text);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 4px 8px;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  flex-shrink: 0;
+}
+
+.media-lib-import-btn:hover:not(:disabled) {
+  background-color: var(--ml-elevated);
+  border-color: var(--ml-accent);
+  color: #ffffff;
+}
+
+.media-lib-import-btn:active:not(:disabled) {
+  background-color: #333333;
+}
+
+.media-lib-import-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.media-lib-import-icon {
+  font-size: 12px;
+  line-height: 1;
+}
+
+/* ── Uploading Banner ── */
+.media-lib-uploading-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background-color: var(--ml-surface);
+  border-bottom: 1px solid var(--ml-border);
+  flex-shrink: 0;
+  animation: media-lib-fade-in 0.2s ease;
+}
+
+.media-lib-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(74, 158, 255, 0.25);
+  border-top-color: var(--ml-accent);
+  border-radius: 50%;
+  animation: media-lib-spin 0.75s linear infinite;
+  flex-shrink: 0;
+}
+
+.media-lib-uploading-text {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--ml-accent);
+}
+
+/* ── Drag Overlay (when hovering files over populated library) ── */
+.media-lib-drag-overlay {
+  position: absolute;
+  top: 41px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(26, 26, 26, 0.9);
+  backdrop-filter: blur(2px);
+  border: 2px dashed var(--ml-accent);
+  margin: 6px;
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  z-index: 20;
+  pointer-events: none;
+  animation: media-lib-fade-in 0.15s ease;
+}
+
+/* ── Content Container ── */
+.media-lib-content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 8px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+
+.media-lib-content::-webkit-scrollbar {
+  width: 5px;
+}
+
+.media-lib-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.media-lib-content::-webkit-scrollbar-thumb {
+  background-color: var(--ml-border);
+  border-radius: 3px;
+}
+
+.media-lib-content::-webkit-scrollbar-thumb:hover {
+  background-color: var(--ml-text-muted);
+}
+
+/* ── Empty Drop Zone ── */
+.media-lib-dropzone {
+  flex: 1;
+  min-height: 220px;
+  border: 2px dashed var(--ml-border);
+  border-radius: 6px;
+  background-color: rgba(36, 36, 36, 0.35);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 16px 12px;
+  box-sizing: border-box;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background-color 0.2s ease, transform 0.15s ease;
+  outline: none;
+}
+
+.media-lib-dropzone:hover {
+  border-color: var(--ml-text-muted);
+  background-color: var(--ml-surface);
+}
+
+.media-lib-dropzone:focus-visible {
+  border-color: var(--ml-accent);
+  outline: 1px solid var(--ml-accent);
+}
+
+.media-lib-dropzone-active {
+  border-color: var(--ml-accent);
+  background-color: rgba(74, 158, 255, 0.08);
+}
+
+.media-lib-dropzone-icon {
+  font-size: 28px;
+  line-height: 1;
+  margin-bottom: 8px;
+}
+
+.media-lib-dropzone-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ml-text);
+  margin: 0 0 6px 0;
+}
+
+.media-lib-dropzone-formats {
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--ml-text-muted);
+  margin: 0 0 12px 0;
+  max-width: 180px;
+}
+
+.media-lib-dropzone-browse-btn {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ml-accent);
+  background-color: rgba(74, 158, 255, 0.1);
+  border: 1px solid rgba(74, 158, 255, 0.3);
+  padding: 5px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.media-lib-dropzone-browse-btn:hover {
+  background-color: rgba(74, 158, 255, 0.2);
+  border-color: var(--ml-accent);
+}
+
+/* ── 2-Column Media Grid ── */
+.media-lib-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* ── Media Card ── */
+.media-lib-card {
+  position: relative;
+  background-color: var(--ml-surface);
+  border: 1px solid var(--ml-border);
+  border-radius: 5px;
+  overflow: hidden;
+  cursor: grab;
+  display: flex;
+  flex-direction: column;
+  transition: border-color 0.15s ease, background-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.media-lib-card:hover {
+  background-color: var(--ml-elevated);
+  border-color: #555555;
+  transform: translateY(-1px);
+}
+
+.media-lib-card:active {
+  cursor: grabbing;
+}
+
+.media-lib-card:focus-visible {
+  border-color: var(--ml-accent);
+}
+
+.media-lib-card-selected {
+  border-color: var(--ml-accent) !important;
+  box-shadow: 0 0 0 1px var(--ml-accent);
+}
+
+/* ── Thumbnail Wrapper & Elements ── */
+.media-lib-thumbnail-wrapper {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background-color: #121212;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.media-lib-thumbnail-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  pointer-events: none;
+}
+
+.media-lib-type-badge {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  background-color: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(2px);
+  border-radius: 3px;
+  font-size: 10px;
+  line-height: 1;
+  padding: 2px 3px;
+  pointer-events: none;
+}
+
+.media-lib-duration-badge {
+  position: absolute;
+  bottom: 3px;
+  right: 3px;
+  background-color: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(2px);
+  color: #ffffff;
+  font-size: 9px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  padding: 1px 3px;
+  border-radius: 2px;
+  line-height: 1.2;
+  pointer-events: none;
+}
+
+.media-lib-add-btn {
+  position: absolute;
+  bottom: 3px;
+  left: 3px;
+  background-color: var(--ml-accent, #4a9eff);
+  border: none;
+  border-radius: 3px;
+  color: #ffffff;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 6px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease, filter 0.15s ease;
+  z-index: 3;
+}
+
+.media-lib-card:hover .media-lib-add-btn,
+.media-lib-add-btn:focus-visible {
+  opacity: 1;
+}
+
+.media-lib-add-btn:hover {
+  filter: brightness(1.15);
+}
+
+.media-lib-delete-btn {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background-color: rgba(0, 0, 0, 0.7);
+  border: none;
+  color: var(--ml-text-muted);
+  font-size: 10px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+  padding: 0;
+  z-index: 2;
+}
+
+.media-lib-card:hover .media-lib-delete-btn,
+.media-lib-delete-btn:focus-visible {
+  opacity: 1;
+}
+
+.media-lib-delete-btn:hover {
+  background-color: var(--ml-playhead-red);
+  color: #ffffff;
+}
+
+/* ── Card Filename Info ── */
+.media-lib-info {
+  padding: 4px 6px 5px;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.media-lib-filename {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--ml-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
+  line-height: 1.3;
+}
+
+/* ── Animations ── */
+@keyframes media-lib-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes media-lib-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

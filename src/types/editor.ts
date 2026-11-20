@@ -1,0 +1,67 @@
+/* ─────────────────────────────────────────────
+ *  Core type definitions for the Timeline Editor
+ * ───────────────────────────────────────────── */
+
+export type MediaType = 'video' | 'audio' | 'image' | 'text';
+
+/** An uploaded media asset in the library. */
+export interface MediaItem {
+  id: string;
+  name: string;
+  type: MediaType;
+  file: File;
+  url: string;            // Object URL for playback / display
+  duration: number;       // seconds  (images default to 5 s)
+  thumbnail: string;      // data-URL preview
+  width?: number;
+  height?: number;
+}
+
+/** A horizontal lane on the timeline. */
+export interface Track {
+  id: string;
+  name: string;
+  type: 'video' | 'audio' | 'overlay';
+  icon: string;
+  muted: boolean;
+  locked: boolean;
+}
+
+/** A clip placed on a track. */
+export interface TimelineClip {
+  id: string;
+  trackId: string;
+  mediaId: string;
+  mediaType: MediaType;
+  startTime: number;      // position on the timeline (s)
+  duration: number;       // visible duration (s)
+  trimStart: number;      // offset into source media (s)
+  volume: number;         // 0 – 1
+  opacity: number;        // 0 – 1
+  label: string;
+  color: string;
+  thumbnail: string;      // data-URL for the clip chip
+
+  /* Subtitle / Text clip fields */
+  text?: string;
+  fontSize?: number;      // px (default 32)
+  textColor?: string;     // hex (default '#ffffff')
+  textBgColor?: string;   // hex (default '#000000')
+  textPosition?: 'top' | 'center' | 'bottom';
+}
+
+/** Transient state while the user is dragging something. */
+export interface DragContext {
+  type: 'move' | 'trim-left' | 'trim-right';
+  clipId: string;
+  startMouseX: number;
+  startValue: number;     // startTime  for move,  trimStart  for trim-left,  duration for trim-right
+  startDuration: number;
+  startTrimStart: number;
+  startStartTime: number;
+}
+
+/** Data attached to a drag-from-library event. */
+export interface LibraryDragData {
+  mediaId: string;
+}
