@@ -12,6 +12,7 @@ export interface StoredMediaItem {
   file: File;
   duration: number;
   thumbnail: string;
+  waveform?: number[];
   width?: number;
   height?: number;
 }

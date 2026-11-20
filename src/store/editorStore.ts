@@ -1,6 +1,11 @@
 import { create } from 'zustand';
 import type { MediaItem, Track, TimelineClip, MediaType } from '../types/editor';
-import { generateThumbnail, getMediaDuration, getMediaType } from '../utils/media';
+import {
+  generateThumbnail,
+  getMediaDuration,
+  getMediaType,
+  extractAudioWaveform,
+} from '../utils/media';
 import { snapToGrid } from '../utils/time';
 import { saveProjectToDB, loadProjectFromDB, clearProjectInDB } from '../utils/projectStorage';
 
@@ -302,9 +307,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       try {
         const type = getMediaType(file);
         const url = URL.createObjectURL(file);
-        const [thumbnail, duration] = await Promise.all([
+        const [thumbnail, duration, waveform] = await Promise.all([
           generateThumbnail(file, type),
           getMediaDuration(file, type),
+          type === 'audio' ? extractAudioWaveform(file) : Promise.resolve(undefined),
         ]);
         incoming.push({
           id: crypto.randomUUID(),
@@ -314,6 +320,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
           url,
           duration,
           thumbnail,
+          ...(waveform && waveform.length > 0 ? { waveform } : {}),
         });
       } catch (err) {
         console.warn('Failed to process', file.name, err);

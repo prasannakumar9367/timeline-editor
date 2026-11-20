@@ -1,6 +1,7 @@
 import React, { useRef } from 'react';
 import { useEditorStore } from '../../store/editorStore';
 import type { TimelineClip as ClipType } from '../../types/editor';
+import { AudioWaveform } from './AudioWaveform';
 
 interface TimelineClipProps {
   clip: ClipType;
@@ -14,8 +15,12 @@ export const TimelineClip: React.FC<TimelineClipProps> = ({ clip }) => {
   const trimClipStart = useEditorStore((s) => s.trimClipStart);
   const trimClipEnd = useEditorStore((s) => s.trimClipEnd);
   const recordHistory = useEditorStore((s) => s.recordHistory);
+  const mediaItem = useEditorStore((s) =>
+    clip.mediaType === 'audio' ? s.mediaItems.find((m) => m.id === clip.mediaId) : undefined
+  );
 
   const isSelected = selectedClipId === clip.id;
+  const isAudio = clip.mediaType === 'audio';
   const leftPx = clip.startTime * pixelsPerSecond;
   const widthPx = Math.max(12, clip.duration * pixelsPerSecond);
 
@@ -145,11 +150,14 @@ export const TimelineClip: React.FC<TimelineClipProps> = ({ clip }) => {
 
   return (
     <div
-      className={`timeline-clip ${isSelected ? 'timeline-clip-selected' : ''}`}
+      className={`timeline-clip ${isSelected ? 'timeline-clip-selected' : ''} ${
+        isAudio ? 'timeline-clip-audio' : ''
+      }`}
       style={{
         left: `${leftPx}px`,
         width: `${widthPx}px`,
-        backgroundColor: clip.color,
+        backgroundColor: isAudio ? undefined : clip.color,
+        borderColor: isAudio ? clip.color : undefined,
         opacity: clip.opacity,
       }}
       onPointerDown={handleBodyPointerDown}
@@ -158,6 +166,18 @@ export const TimelineClip: React.FC<TimelineClipProps> = ({ clip }) => {
         selectClip(clip.id);
       }}
     >
+      {/* Audio Waveform Background */}
+      {isAudio && (
+        <AudioWaveform
+          media={mediaItem}
+          trimStart={clip.trimStart}
+          duration={clip.duration}
+          widthPx={widthPx}
+          color={clip.color}
+          volume={clip.volume}
+        />
+      )}
+
       {/* Left Trim Handle */}
       <div
         className="timeline-clip-handle timeline-clip-handle-left"
@@ -166,9 +186,11 @@ export const TimelineClip: React.FC<TimelineClipProps> = ({ clip }) => {
       />
 
       {/* Clip Content */}
-      <div className="timeline-clip-body">
+      <div className={`timeline-clip-body ${isAudio ? 'timeline-clip-body-audio' : ''}`}>
         {clip.mediaType === 'text' ? (
           <span style={{ fontSize: '14px', flexShrink: 0 }}>💬</span>
+        ) : isAudio ? (
+          <span className="timeline-clip-audio-badge">🎵</span>
         ) : clip.thumbnail ? (
           <img
             src={clip.thumbnail}

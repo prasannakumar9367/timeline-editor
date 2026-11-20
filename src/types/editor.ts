@@ -13,6 +13,7 @@ export interface MediaItem {
   url: string;            // Object URL for playback / display
   duration: number;       // seconds  (images default to 5 s)
   thumbnail: string;      // data-URL preview
+  waveform?: number[];    // normalized amplitude peaks (0–1) for audio clips
   width?: number;
   height?: number;
 }

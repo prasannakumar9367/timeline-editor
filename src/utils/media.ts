@@ -131,6 +131,72 @@ export function getMediaDuration(file: File, type: MediaType): Promise<number> {
   });
 }
 
+/* ─── Audio Waveform Extraction ─── */
+
+export async function extractAudioWaveform(
+  file: File,
+  sampleCount = 600
+): Promise<number[]> {
+  const AudioCtx =
+    window.AudioContext ||
+    (window as unknown as { webkitAudioContext?: typeof AudioContext })
+      .webkitAudioContext;
+  if (!AudioCtx) return [];
+
+  const audioCtx = new AudioCtx();
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+    const channelCount = audioBuffer.numberOfChannels;
+    const totalSamples = audioBuffer.length;
+    if (totalSamples === 0 || channelCount === 0) return [];
+
+    const channels: Float32Array[] = [];
+    for (let ch = 0; ch < channelCount; ch++) {
+      channels.push(audioBuffer.getChannelData(ch));
+    }
+
+    const count = Math.min(sampleCount, totalSamples);
+    const blockSize = totalSamples / count;
+    const rawPeaks = new Array<number>(count);
+    let maxPeak = 0;
+
+    // Sample up to 64 points per bucket for fast decoding even on long tracks
+    for (let i = 0; i < count; i++) {
+      const start = Math.floor(i * blockSize);
+      const end = Math.min(totalSamples, Math.floor((i + 1) * blockSize));
+      const span = Math.max(1, end - start);
+      const step = Math.max(1, Math.floor(span / 64));
+
+      let peak = 0;
+      for (let s = start; s < end; s += step) {
+        let sum = 0;
+        for (let ch = 0; ch < channelCount; ch++) {
+          sum += Math.abs(channels[ch][s]);
+        }
+        const avg = sum / channelCount;
+        if (avg > peak) peak = avg;
+      }
+
+      rawPeaks[i] = peak;
+      if (peak > maxPeak) maxPeak = peak;
+    }
+
+    if (maxPeak <= 0.0001) {
+      return rawPeaks.map(() => 0.05);
+    }
+
+    return rawPeaks.map((p) => Number((p / maxPeak).toFixed(3)));
+  } catch (err) {
+    console.warn('Failed to extract audio waveform:', err);
+    return [];
+  } finally {
+    if (audioCtx.state !== 'closed') {
+      void audioCtx.close();
+    }
+  }
+}
+
 /* ─── Accepted MIME types for the file picker ─── */
 
 export const ACCEPTED_TYPES = [
