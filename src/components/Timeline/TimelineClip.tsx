@@ -1,4 +1,4 @@
-import React, { useRef, useCallback } from 'react';
+import React, { useRef } from 'react';
 import { useEditorStore } from '../../store/editorStore';
 import type { TimelineClip as ClipType } from '../../types/editor';
 
@@ -13,6 +13,7 @@ export const TimelineClip: React.FC<TimelineClipProps> = ({ clip }) => {
   const moveClip = useEditorStore((s) => s.moveClip);
   const trimClipStart = useEditorStore((s) => s.trimClipStart);
   const trimClipEnd = useEditorStore((s) => s.trimClipEnd);
+  const recordHistory = useEditorStore((s) => s.recordHistory);
 
   const isSelected = selectedClipId === clip.id;
   const leftPx = clip.startTime * pixelsPerSecond;
@@ -38,9 +39,15 @@ export const TimelineClip: React.FC<TimelineClipProps> = ({ clip }) => {
 
     const startX = e.clientX;
     const initialStartTime = clip.startTime;
+    let recorded = false;
 
     const onPointerMove = (ev: PointerEvent) => {
       const deltaPx = ev.clientX - startX;
+      if (!recorded && Math.abs(deltaPx) > 2) {
+        recordHistory();
+        recorded = true;
+      }
+      if (!recorded) return;
       const deltaTime = deltaPx / pixelsPerSecond;
       const newStart = Math.max(0, initialStartTime + deltaTime);
       moveClip(clip.id, newStart, clip.trackId);
@@ -67,10 +74,16 @@ export const TimelineClip: React.FC<TimelineClipProps> = ({ clip }) => {
       initialTrimStart: clip.trimStart,
       initialDuration: clip.duration,
     };
+    let recorded = false;
 
     const onPointerMove = (ev: PointerEvent) => {
       const { startX, initialStartTime, initialTrimStart, initialDuration } = dragStartRef.current;
       const deltaPx = ev.clientX - startX;
+      if (!recorded && Math.abs(deltaPx) > 1) {
+        recordHistory();
+        recorded = true;
+      }
+      if (!recorded) return;
       const deltaTime = deltaPx / pixelsPerSecond;
 
       // Ensure we don't trim past duration min (0.25s) or negative trimStart
@@ -105,10 +118,16 @@ export const TimelineClip: React.FC<TimelineClipProps> = ({ clip }) => {
       initialTrimStart: clip.trimStart,
       initialDuration: clip.duration,
     };
+    let recorded = false;
 
     const onPointerMove = (ev: PointerEvent) => {
       const { startX, initialDuration } = dragStartRef.current;
       const deltaPx = ev.clientX - startX;
+      if (!recorded && Math.abs(deltaPx) > 1) {
+        recordHistory();
+        recorded = true;
+      }
+      if (!recorded) return;
       const deltaTime = deltaPx / pixelsPerSecond;
       const newDur = Math.max(0.25, initialDuration + deltaTime);
 

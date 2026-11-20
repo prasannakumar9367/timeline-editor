@@ -14,12 +14,36 @@ const nextColor = () => CLIP_COLORS[colorIdx++ % CLIP_COLORS.length];
 
 /* ── Default tracks ── */
 const DEFAULT_TRACKS: Track[] = [
-  { id: 'video-1',   name: 'Video 1',       type: 'video',   icon: '🎬', muted: false, locked: false },
-  { id: 'video-2',   name: 'Video 2',       type: 'video',   icon: '🎬', muted: false, locked: false },
-  { id: 'audio-1',   name: 'Audio 1',       type: 'audio',   icon: '🎙️', muted: false, locked: false },
-  { id: 'audio-2',   name: 'Audio 2',       type: 'audio',   icon: '🎙️', muted: false, locked: false },
-  { id: 'overlay-1', name: 'Text / Images', type: 'overlay', icon: '✏️',  muted: false, locked: false },
+  { id: 'video-1', name: 'Video', type: 'video', icon: '🎬', muted: false, locked: false },
+  { id: 'audio-1', name: 'Audio', type: 'audio', icon: '🎙️', muted: false, locked: false },
+  { id: 'image-1', name: 'Image', type: 'image', icon: '🖼️', muted: false, locked: false },
+  { id: 'text-1',  name: 'Text',  type: 'text',  icon: '💬', muted: false, locked: false },
 ];
+
+/* ── History snapshot for Undo / Redo ── */
+export interface HistorySnapshot {
+  tracks: Track[];
+  clips: TimelineClip[];
+  selectedClipId: string | null;
+}
+
+const MAX_HISTORY = 50;
+
+function createSnapshot(state: Pick<EditorState, 'tracks' | 'clips' | 'selectedClipId'>): HistorySnapshot {
+  return {
+    tracks: state.tracks.map((t) => ({ ...t })),
+    clips: state.clips.map((c) => ({ ...c })),
+    selectedClipId: state.selectedClipId,
+  };
+}
+
+function pushSnapshot(
+  past: HistorySnapshot[],
+  state: Pick<EditorState, 'tracks' | 'clips' | 'selectedClipId'>,
+): HistorySnapshot[] {
+  const next = [...past, createSnapshot(state)];
+  return next.length > MAX_HISTORY ? next.slice(next.length - MAX_HISTORY) : next;
+}
 
 /* ── State shape ── */
 export interface EditorState {
@@ -30,6 +54,10 @@ export interface EditorState {
   /* Timeline */
   tracks: Track[];
   clips: TimelineClip[];
+
+  /* History (Undo / Redo) */
+  past: HistorySnapshot[];
+  future: HistorySnapshot[];
 
   /* Playback */
   currentTime: number;
@@ -54,6 +82,10 @@ export interface EditorState {
   isExportModalOpen: boolean;
 
   /* ── Actions ── */
+  recordHistory: () => void;
+  undo: () => void;
+  redo: () => void;
+
   saveProject: () => Promise<void>;
   loadSavedProject: () => Promise<boolean>;
   resetProject: () => Promise<void>;
@@ -71,7 +103,11 @@ export interface EditorState {
   deleteClip: (clipId: string) => void;
   duplicateClip: (clipId: string) => void;
   selectClip: (clipId: string | null) => void;
-  updateClip: (clipId: string, updates: Partial<TimelineClip>) => void;
+  updateClip: (
+    clipId: string,
+    updates: Partial<TimelineClip>,
+    options?: { recordHistory?: boolean },
+  ) => void;
 
   setCurrentTime: (t: number) => void;
   play: () => void;
@@ -84,7 +120,7 @@ export interface EditorState {
 
   toggleTrackMute: (id: string) => void;
   toggleTrackLock: (id: string) => void;
-  addTrack: (type: 'video' | 'audio' | 'overlay') => void;
+  addTrack: (type: 'video' | 'audio' | 'image' | 'text') => void;
   removeTrack: (id: string) => void;
 
   toggleSnap: () => void;
@@ -96,8 +132,17 @@ function getTrackForType(type: MediaType, tracks: Track[]): string {
   if (type === 'audio') {
     return tracks.find((t) => t.type === 'audio')?.id ?? tracks[0]?.id;
   }
-  if (type === 'image' || type === 'text') {
+  if (type === 'image') {
     return (
+      tracks.find((t) => t.type === 'image')?.id ??
+      tracks.find((t) => t.type === 'overlay')?.id ??
+      tracks.find((t) => t.type === 'video')?.id ??
+      tracks[0]?.id
+    );
+  }
+  if (type === 'text') {
+    return (
+      tracks.find((t) => t.type === 'text')?.id ??
       tracks.find((t) => t.type === 'overlay')?.id ??
       tracks.find((t) => t.type === 'video')?.id ??
       tracks[0]?.id
@@ -113,6 +158,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   isUploading: false,
   tracks: DEFAULT_TRACKS,
   clips: [],
+  past: [],
+  future: [],
   currentTime: 0,
   duration: 30,
   isPlaying: false,
@@ -125,6 +172,45 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   isSaving: false,
   lastSavedAt: null,
   isExportModalOpen: false,
+
+  /* ── History (Undo / Redo) ── */
+  recordHistory: () =>
+    set((s) => ({
+      past: pushSnapshot(s.past, s),
+      future: [],
+    })),
+
+  undo: () => {
+    const { past, future, tracks, clips, selectedClipId } = get();
+    if (past.length === 0) return;
+    const previous = past[past.length - 1];
+    const nextPast = past.slice(0, -1);
+    const currentSnapshot = createSnapshot({ tracks, clips, selectedClipId });
+    set({
+      tracks: previous.tracks,
+      clips: previous.clips,
+      selectedClipId: previous.selectedClipId,
+      past: nextPast,
+      future: [...future, currentSnapshot],
+    });
+    get().recalcDuration();
+  },
+
+  redo: () => {
+    const { past, future, tracks, clips, selectedClipId } = get();
+    if (future.length === 0) return;
+    const next = future[future.length - 1];
+    const nextFuture = future.slice(0, -1);
+    const currentSnapshot = createSnapshot({ tracks, clips, selectedClipId });
+    set({
+      tracks: next.tracks,
+      clips: next.clips,
+      selectedClipId: next.selectedClipId,
+      past: [...past, currentSnapshot].slice(-MAX_HISTORY),
+      future: nextFuture,
+    });
+    get().recalcDuration();
+  },
 
   /* ── Persistence & Export UI ── */
   saveProject: async () => {
@@ -158,6 +244,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         tracks: loadedTracks,
         clips: validClips,
         mediaItems: saved.mediaItems,
+        past: [],
+        future: [],
         zoom: saved.zoom,
         pixelsPerSecond: 80 * saved.zoom,
         snapEnabled: saved.snapEnabled,
@@ -189,6 +277,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       mediaItems: [],
       tracks: DEFAULT_TRACKS,
       clips: [],
+      past: [],
+      future: [],
       currentTime: 0,
       duration: 30,
       isPlaying: false,
@@ -266,6 +356,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     set((s) => ({
       mediaItems: [...s.mediaItems, ...incoming],
       clips: newClips.length > 0 ? [...s.clips, ...newClips] : s.clips,
+      past: newClips.length > 0 ? pushSnapshot(s.past, s) : s.past,
+      future: newClips.length > 0 ? [] : s.future,
       selectedClipId: newClips.length > 0 ? newClips[0].id : s.selectedClipId,
       selectedMediaId: incoming[0].id,
       isUploading: false,
@@ -275,11 +367,16 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   },
 
   removeMedia: (id) =>
-    set((s) => ({
-      mediaItems: s.mediaItems.filter((m) => m.id !== id),
-      clips: s.clips.filter((c) => c.mediaId !== id),
-      selectedMediaId: s.selectedMediaId === id ? null : s.selectedMediaId,
-    })),
+    set((s) => {
+      const hadClips = s.clips.some((c) => c.mediaId === id);
+      return {
+        mediaItems: s.mediaItems.filter((m) => m.id !== id),
+        clips: s.clips.filter((c) => c.mediaId !== id),
+        past: hadClips ? pushSnapshot(s.past, s) : s.past,
+        future: hadClips ? [] : s.future,
+        selectedMediaId: s.selectedMediaId === id ? null : s.selectedMediaId,
+      };
+    }),
 
   selectMedia: (id) => set({ selectedMediaId: id }),
 
@@ -308,7 +405,12 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       thumbnail: media.thumbnail,
     };
 
-    set((s) => ({ clips: [...s.clips, clip], selectedClipId: clip.id }));
+    set((s) => ({
+      past: pushSnapshot(s.past, s),
+      future: [],
+      clips: [...s.clips, clip],
+      selectedClipId: clip.id,
+    }));
     get().recalcDuration();
   },
 
@@ -338,9 +440,16 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       textColor: '#ffffff',
       textBgColor: '#000000',
       textPosition: 'bottom',
+      textX: 50,
+      textY: 86,
     };
 
-    set((s) => ({ clips: [...s.clips, clip], selectedClipId: clip.id }));
+    set((s) => ({
+      past: pushSnapshot(s.past, s),
+      future: [],
+      clips: [...s.clips, clip],
+      selectedClipId: clip.id,
+    }));
     get().recalcDuration();
   },
 
@@ -394,6 +503,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   deleteClip: (clipId) => {
     set((s) => ({
+      past: pushSnapshot(s.past, s),
+      future: [],
       clips: s.clips.filter((c) => c.id !== clipId),
       selectedClipId: s.selectedClipId === clipId ? null : s.selectedClipId,
     }));
@@ -409,14 +520,21 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       startTime: clip.startTime + clip.duration + 0.1,
       color: nextColor(),
     };
-    set((s) => ({ clips: [...s.clips, dup], selectedClipId: dup.id }));
+    set((s) => ({
+      past: pushSnapshot(s.past, s),
+      future: [],
+      clips: [...s.clips, dup],
+      selectedClipId: dup.id,
+    }));
     get().recalcDuration();
   },
 
   selectClip: (id) => set({ selectedClipId: id }),
 
-  updateClip: (clipId, updates) => {
+  updateClip: (clipId, updates, options) => {
+    const shouldRecord = options?.recordHistory ?? true;
     set((s) => ({
+      ...(shouldRecord ? { past: pushSnapshot(s.past, s), future: [] } : {}),
       clips: s.clips.map((c) => (c.id === clipId ? { ...c, ...updates } : c)),
     }));
     if (updates.startTime !== undefined || updates.duration !== undefined) {
@@ -440,28 +558,43 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   /* ── Tracks ── */
   toggleTrackMute: (id) =>
-    set((s) => ({ tracks: s.tracks.map((t) => (t.id === id ? { ...t, muted: !t.muted } : t)) })),
+    set((s) => ({
+      past: pushSnapshot(s.past, s),
+      future: [],
+      tracks: s.tracks.map((t) => (t.id === id ? { ...t, muted: !t.muted } : t)),
+    })),
   toggleTrackLock: (id) =>
-    set((s) => ({ tracks: s.tracks.map((t) => (t.id === id ? { ...t, locked: !t.locked } : t)) })),
+    set((s) => ({
+      past: pushSnapshot(s.past, s),
+      future: [],
+      tracks: s.tracks.map((t) => (t.id === id ? { ...t, locked: !t.locked } : t)),
+    })),
 
   addTrack: (type) => {
     const { tracks } = get();
     const count = tracks.filter((t) => t.type === type).length + 1;
-    const icons = { video: '🎬', audio: '🎙️', overlay: '✏️' };
-    const names = { video: `Video ${count}`, audio: `Audio ${count}`, overlay: `Overlay ${count}` };
+    const icons = { video: '🎬', audio: '🎙️', image: '🖼️', text: '💬' };
+    const baseNames = { video: 'Video', audio: 'Audio', image: 'Image', text: 'Text' };
+    const name = count === 1 ? baseNames[type] : `${baseNames[type]} ${count}`;
     const track: Track = {
       id: `${type}-${Date.now()}`,
-      name: names[type],
+      name,
       type,
       icon: icons[type],
       muted: false,
       locked: false,
     };
-    set({ tracks: [...tracks, track] });
+    set((s) => ({
+      past: pushSnapshot(s.past, s),
+      future: [],
+      tracks: [...s.tracks, track],
+    }));
   },
 
   removeTrack: (id) =>
     set((s) => ({
+      past: pushSnapshot(s.past, s),
+      future: [],
       tracks: s.tracks.filter((t) => t.id !== id),
       clips: s.clips.filter((c) => c.trackId !== id),
     })),

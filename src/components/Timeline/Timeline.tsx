@@ -100,11 +100,20 @@ export default function Timeline() {
                 <button
                   type="button"
                   onClick={() => {
-                    addTrack('overlay');
+                    addTrack('image');
                     setAddMenuOpen(false);
                   }}
                 >
-                  ✏️ Add Text/Image Track
+                  🖼️ Add Image Track
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    addTrack('text');
+                    setAddMenuOpen(false);
+                  }}
+                >
+                  💬 Add Text Track
                 </button>
               </div>
             )}

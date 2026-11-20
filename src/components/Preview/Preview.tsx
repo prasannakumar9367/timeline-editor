@@ -1,8 +1,18 @@
-import React, { useMemo, useRef, useEffect } from 'react';
+import React, { useMemo, useRef, useEffect, useState } from 'react';
 import './Preview.css';
 import { useEditorStore } from '../../store/editorStore';
 import { formatTime } from '../../utils/time';
 import type { TimelineClip, MediaItem } from '../../types/editor';
+
+export function getTextCoords(clip: TimelineClip): { x: number; y: number } {
+  const x = clip.textX ?? 50;
+  if (clip.textY !== undefined) {
+    return { x, y: clip.textY };
+  }
+  const pos = clip.textPosition ?? 'bottom';
+  const y = pos === 'top' ? 14 : pos === 'center' ? 50 : 86;
+  return { x, y };
+}
 
 export default function Preview() {
   const currentTime = useEditorStore((s) => s.currentTime);
@@ -10,9 +20,15 @@ export default function Preview() {
   const clips = useEditorStore((s) => s.clips);
   const tracks = useEditorStore((s) => s.tracks);
   const mediaItems = useEditorStore((s) => s.mediaItems);
+  const selectedClipId = useEditorStore((s) => s.selectedClipId);
   const selectedMediaId = useEditorStore((s) => s.selectedMediaId);
   const togglePlay = useEditorStore((s) => s.togglePlay);
   const addClip = useEditorStore((s) => s.addClip);
+  const selectClip = useEditorStore((s) => s.selectClip);
+  const updateClip = useEditorStore((s) => s.updateClip);
+  const recordHistory = useEditorStore((s) => s.recordHistory);
+
+  const screenRef = useRef<HTMLDivElement>(null);
 
   // Synchronous Map of media items - no useRef render-lag!
   const mediaMap = useMemo(
@@ -26,12 +42,16 @@ export default function Preview() {
     [tracks]
   );
 
-  // Track index map for proper visual layer ordering (overlays on top)
+  // Track index map for proper visual layer ordering (video < image < text)
   const trackOrderMap = useMemo(() => {
     const map = new Map<string, number>();
     tracks.forEach((t, index) => {
-      // Overlay tracks rendered above video tracks
-      const priority = t.type === 'overlay' ? 100 + index : index;
+      const priority =
+        t.type === 'text'
+          ? 200 + index
+          : t.type === 'image' || t.type === 'overlay'
+          ? 100 + index
+          : index;
       map.set(t.id, priority);
     });
     return map;
@@ -78,23 +98,36 @@ export default function Preview() {
   }, [visualClips, selectedMediaId, mediaMap, mediaItems]);
 
   const topClip = visualClips.length > 0 ? visualClips[visualClips.length - 1] : null;
+  const selectedActiveClip = useMemo(
+    () => visualClips.find((c) => c.id === selectedClipId) ?? null,
+    [visualClips, selectedClipId]
+  );
 
   return (
     <div className="preview-container">
       <div
-        className="preview-screen"
+        ref={screenRef}
+        className={`preview-screen ${selectedActiveClip ? 'preview-screen--has-selection' : ''}`}
         onClick={togglePlay}
         title="Click to Play / Pause (Space)"
       >
         {/* Case 1: Active timeline visual clips */}
         {visualClips.length > 0 ? (
           visualClips.map((clip, index) => {
+            const isSelected = clip.id === selectedClipId;
             if (clip.mediaType === 'text') {
               return (
                 <SubtitleClipRenderer
                   key={clip.id}
                   clip={clip}
-                  zIndex={index + 20}
+                  zIndex={isSelected ? index + 40 : index + 20}
+                  isSelected={isSelected}
+                  screenRef={screenRef}
+                  onSelect={selectClip}
+                  onMoveStart={recordHistory}
+                  onMove={(textX, textY) =>
+                    updateClip(clip.id, { textX, textY }, { recordHistory: false })
+                  }
                 />
               );
             }
@@ -108,6 +141,7 @@ export default function Preview() {
                 currentTime={currentTime}
                 isPlaying={isPlaying}
                 zIndex={index + 1}
+                isSelected={isSelected}
               />
             );
           })
@@ -188,6 +222,17 @@ export default function Preview() {
           </div>
         )}
 
+        {/* Selected Clip Highlight Badge */}
+        {selectedActiveClip && (
+          <div className="preview-selected-badge">
+            <span className="preview-selected-dot" />
+            <span className="preview-selected-label">
+              Selected: {selectedActiveClip.label}
+              {selectedActiveClip.mediaType === 'text' ? ' · Drag to move' : ''}
+            </span>
+          </div>
+        )}
+
         {/* Timecode Badge */}
         <div className="preview-timecode-badge">
           <span
@@ -212,31 +257,106 @@ function hexToRgba(hex: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
+interface SubtitleProps {
+  clip: TimelineClip;
+  zIndex: number;
+  isSelected: boolean;
+  screenRef: React.RefObject<HTMLDivElement | null>;
+  onSelect: (clipId: string) => void;
+  onMoveStart: () => void;
+  onMove: (x: number, y: number) => void;
+}
+
 function SubtitleClipRenderer({
   clip,
   zIndex,
-}: {
-  clip: TimelineClip;
-  zIndex: number;
-}) {
-  const pos = clip.textPosition ?? 'bottom';
+  isSelected,
+  screenRef,
+  onSelect,
+  onMoveStart,
+  onMove,
+}: SubtitleProps) {
+  const [isDragging, setIsDragging] = useState(false);
+  const { x, y } = getTextCoords(clip);
   const fontSize = clip.fontSize ?? 32;
   const textColor = clip.textColor ?? '#ffffff';
   const bgHex = clip.textBgColor ?? '#000000';
 
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    onSelect(clip.id);
+
+    const screenEl = screenRef.current;
+    if (!screenEl) return;
+
+    const rect = screenEl.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
+
+    const startClientX = e.clientX;
+    const startClientY = e.clientY;
+    const initialX = x;
+    const initialY = y;
+    let recorded = false;
+
+    const onPointerMove = (ev: PointerEvent) => {
+      const dx = ev.clientX - startClientX;
+      const dy = ev.clientY - startClientY;
+      if (!recorded && (Math.abs(dx) > 1 || Math.abs(dy) > 1)) {
+        onMoveStart();
+        recorded = true;
+        setIsDragging(true);
+      }
+      if (!recorded) return;
+
+      const nextX = Math.max(5, Math.min(95, initialX + (dx / rect.width) * 100));
+      const nextY = Math.max(5, Math.min(95, initialY + (dy / rect.height) * 100));
+      onMove(Math.round(nextX * 10) / 10, Math.round(nextY * 10) / 10);
+    };
+
+    const onPointerUp = () => {
+      setIsDragging(false);
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+    };
+
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
+  };
+
   return (
     <div
-      className={`preview-subtitle-layer preview-subtitle-${pos}`}
+      className="preview-subtitle-layer"
       style={{ zIndex, opacity: clip.opacity }}
     >
       <div
-        className="preview-subtitle-box"
+        className={`preview-subtitle-box ${
+          isSelected ? 'preview-subtitle-box--selected' : ''
+        } ${isDragging ? 'preview-subtitle-box--dragging' : ''}`}
         style={{
+          left: `${x}%`,
+          top: `${y}%`,
           fontSize: `${fontSize}px`,
           color: textColor,
           backgroundColor: hexToRgba(bgHex, 0.72),
         }}
+        onPointerDown={handlePointerDown}
+        onClick={(e) => e.stopPropagation()}
+        title="Drag to move text"
       >
+        {isSelected && (
+          <>
+            <span className="preview-handle preview-handle-tl" />
+            <span className="preview-handle preview-handle-tr" />
+            <span className="preview-handle preview-handle-bl" />
+            <span className="preview-handle preview-handle-br" />
+          </>
+        )}
+        {isDragging && (
+          <div className="preview-subtitle-coords">
+            {Math.round(x)}%, {Math.round(y)}%
+          </div>
+        )}
         {clip.text || clip.label}
       </div>
     </div>
@@ -250,6 +370,7 @@ interface VisualProps {
   currentTime: number;
   isPlaying: boolean;
   zIndex: number;
+  isSelected: boolean;
 }
 
 function VisualClipRenderer({
@@ -258,6 +379,7 @@ function VisualClipRenderer({
   currentTime,
   isPlaying,
   zIndex,
+  isSelected,
 }: VisualProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -284,32 +406,51 @@ function VisualClipRenderer({
     }
   }, [isPlaying, clip.mediaType]);
 
+  const highlightOverlay = isSelected ? (
+    <div
+      className="preview-clip-highlight"
+      style={{ zIndex: zIndex + 15 }}
+      aria-hidden="true"
+    >
+      <span className="preview-corner preview-corner-tl" />
+      <span className="preview-corner preview-corner-tr" />
+      <span className="preview-corner preview-corner-bl" />
+      <span className="preview-corner preview-corner-br" />
+    </div>
+  ) : null;
+
   if (clip.mediaType === 'image') {
     return (
-      <img
-        src={media.url}
-        alt={clip.label}
-        className="preview-media preview-image"
-        style={{ opacity: clip.opacity, zIndex }}
-      />
+      <>
+        <img
+          src={media.url}
+          alt={clip.label}
+          className="preview-media preview-image"
+          style={{ opacity: clip.opacity, zIndex }}
+        />
+        {highlightOverlay}
+      </>
     );
   }
 
   return (
-    <video
-      ref={videoRef}
-      src={media.url}
-      className="preview-media preview-video"
-      style={{ opacity: clip.opacity, zIndex }}
-      playsInline
-      muted={false}
-      onLoadedMetadata={() => {
-        if (videoRef.current) {
-          videoRef.current.currentTime = targetMediaTime;
-          videoRef.current.volume = clip.volume;
-        }
-      }}
-    />
+    <>
+      <video
+        ref={videoRef}
+        src={media.url}
+        className="preview-media preview-video"
+        style={{ opacity: clip.opacity, zIndex }}
+        playsInline
+        muted={false}
+        onLoadedMetadata={() => {
+          if (videoRef.current) {
+            videoRef.current.currentTime = targetMediaTime;
+            videoRef.current.volume = clip.volume;
+          }
+        }}
+      />
+      {highlightOverlay}
+    </>
   );
 }
 

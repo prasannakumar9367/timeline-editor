@@ -492,3 +492,26 @@
   border-color: #fb923c;
   color: #ffffff;
 }
+
+/* ── Undo / Redo History Group ── */
+
+.toolbar-history-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.toolbar-history-btn {
+  height: 28px;
+  padding: 0 9px;
+  font-size: 12px;
+  font-weight: 600;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.toolbar-history-btn:hover:not(:disabled) {
+  border-color: #4a9eff;
+  color: #ffffff;
+  background-color: rgba(74, 158, 255, 0.14);
+}

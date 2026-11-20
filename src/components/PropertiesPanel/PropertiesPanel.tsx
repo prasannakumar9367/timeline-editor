@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useEditorStore } from '../../store/editorStore';
 import type { MediaType } from '../../types/editor';
 import { formatTime } from '../../utils/time';
+import { getTextCoords } from '../Preview/Preview';
 import './PropertiesPanel.css';
 
 /**
@@ -41,6 +42,19 @@ const PropertiesPanel: React.FC = () => {
   const updateClip = useEditorStore((state) => state.updateClip);
   const deleteClip = useEditorStore((state) => state.deleteClip);
   const duplicateClip = useEditorStore((state) => state.duplicateClip);
+  const recordHistory = useEditorStore((state) => state.recordHistory);
+
+  // Track whether we already recorded an undo snapshot for the current input focus session
+  const inputHistoryRecordedRef = useRef(false);
+  const ensureInputHistory = () => {
+    if (!inputHistoryRecordedRef.current) {
+      recordHistory();
+      inputHistoryRecordedRef.current = true;
+    }
+  };
+  const resetInputHistory = () => {
+    inputHistoryRecordedRef.current = false;
+  };
 
   const selectedClip = clips.find((c) => c.id === selectedClipId);
   const mediaItem = selectedClip
@@ -64,11 +78,13 @@ const PropertiesPanel: React.FC = () => {
     setStartTimeInput(valStr);
     const parsed = parseFloat(valStr);
     if (!isNaN(parsed) && parsed >= 0 && selectedClip) {
-      updateClip(selectedClip.id, { startTime: parsed });
+      ensureInputHistory();
+      updateClip(selectedClip.id, { startTime: parsed }, { recordHistory: false });
     }
   };
 
   const handleStartTimeBlur = () => {
+    resetInputHistory();
     if (!selectedClip) return;
     const parsed = parseFloat(startTimeInput);
     if (isNaN(parsed) || parsed < 0) {
@@ -84,11 +100,13 @@ const PropertiesPanel: React.FC = () => {
     setDurationInput(valStr);
     const parsed = parseFloat(valStr);
     if (!isNaN(parsed) && parsed > 0 && selectedClip) {
-      updateClip(selectedClip.id, { duration: Math.max(0.1, parsed) });
+      ensureInputHistory();
+      updateClip(selectedClip.id, { duration: Math.max(0.1, parsed) }, { recordHistory: false });
     }
   };
 
   const handleDurationBlur = () => {
+    resetInputHistory();
     if (!selectedClip) return;
     const parsed = parseFloat(durationInput);
     if (isNaN(parsed) || parsed <= 0) {
@@ -176,12 +194,19 @@ const PropertiesPanel: React.FC = () => {
                 rows={3}
                 value={selectedClip.text ?? ''}
                 placeholder="Type your subtitle text..."
+                onFocus={resetInputHistory}
+                onBlur={resetInputHistory}
                 onChange={(e) => {
                   const val = e.target.value;
-                  updateClip(selectedClip.id, {
-                    text: val,
-                    label: val.trim().slice(0, 24) || 'Subtitle',
-                  });
+                  ensureInputHistory();
+                  updateClip(
+                    selectedClip.id,
+                    {
+                      text: val,
+                      label: val.trim().slice(0, 24) || 'Subtitle',
+                    },
+                    { recordHistory: false }
+                  );
                 }}
               />
             </div>
@@ -203,28 +228,55 @@ const PropertiesPanel: React.FC = () => {
                 step={2}
                 className="props-slider"
                 value={selectedClip.fontSize ?? 32}
+                onPointerDown={recordHistory}
                 onChange={(e) =>
-                  updateClip(selectedClip.id, { fontSize: Number(e.target.value) })
+                  updateClip(
+                    selectedClip.id,
+                    { fontSize: Number(e.target.value) },
+                    { recordHistory: false }
+                  )
                 }
               />
             </div>
 
             <div className="props-field">
-              <span className="props-field-label">Position</span>
-              <div className="props-pos-group">
-                {(['top', 'center', 'bottom'] as const).map((pos) => (
-                  <button
-                    key={pos}
-                    type="button"
-                    className={`props-pos-btn ${
-                      (selectedClip.textPosition ?? 'bottom') === pos ? 'active' : ''
-                    }`}
-                    onClick={() => updateClip(selectedClip.id, { textPosition: pos })}
-                  >
-                    {pos[0].toUpperCase() + pos.slice(1)}
-                  </button>
-                ))}
+              <div className="props-field-header">
+                <span className="props-field-label">Position</span>
+                <span className="props-time-display">
+                  {Math.round(getTextCoords(selectedClip).x)}%,{' '}
+                  {Math.round(getTextCoords(selectedClip).y)}%
+                </span>
               </div>
+              <div className="props-pos-group">
+                {(
+                  [
+                    { pos: 'top', y: 14 },
+                    { pos: 'center', y: 50 },
+                    { pos: 'bottom', y: 86 },
+                  ] as const
+                ).map(({ pos, y }) => {
+                  const coords = getTextCoords(selectedClip);
+                  const isPresetActive =
+                    Math.abs(coords.x - 50) < 0.5 && Math.abs(coords.y - y) < 0.5;
+                  return (
+                    <button
+                      key={pos}
+                      type="button"
+                      className={`props-pos-btn ${isPresetActive ? 'active' : ''}`}
+                      onClick={() =>
+                        updateClip(selectedClip.id, {
+                          textPosition: pos,
+                          textX: 50,
+                          textY: y,
+                        })
+                      }
+                    >
+                      {pos[0].toUpperCase() + pos.slice(1)}
+                    </button>
+                  );
+                })}
+              </div>
+              <span className="props-hint">Drag text directly in the preview to place it anywhere</span>
             </div>
 
             <div className="props-row">
@@ -285,9 +337,12 @@ const PropertiesPanel: React.FC = () => {
               className="props-input"
               value={selectedClip.label}
               placeholder="Clip label"
-              onChange={(e) =>
-                updateClip(selectedClip.id, { label: e.target.value })
-              }
+              onFocus={resetInputHistory}
+              onBlur={resetInputHistory}
+              onChange={(e) => {
+                ensureInputHistory();
+                updateClip(selectedClip.id, { label: e.target.value }, { recordHistory: false });
+              }}
             />
           </div>
 
@@ -409,10 +464,13 @@ const PropertiesPanel: React.FC = () => {
                   step="1"
                   className="props-range-slider"
                   value={volumePercent}
+                  onPointerDown={recordHistory}
                   onChange={(e) =>
-                    updateClip(selectedClip.id, {
-                      volume: Number(e.target.value) / 100,
-                    })
+                    updateClip(
+                      selectedClip.id,
+                      { volume: Number(e.target.value) / 100 },
+                      { recordHistory: false }
+                    )
                   }
                 />
               </div>
@@ -435,10 +493,13 @@ const PropertiesPanel: React.FC = () => {
                   step="1"
                   className="props-range-slider"
                   value={opacityPercent}
+                  onPointerDown={recordHistory}
                   onChange={(e) =>
-                    updateClip(selectedClip.id, {
-                      opacity: Number(e.target.value) / 100,
-                    })
+                    updateClip(
+                      selectedClip.id,
+                      { opacity: Number(e.target.value) / 100 },
+                      { recordHistory: false }
+                    )
                   }
                 />
               </div>

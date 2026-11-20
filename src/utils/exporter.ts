@@ -151,17 +151,23 @@ function drawSubtitle(
   const maxLineW = Math.max(...lines.map((l) => ctx.measureText(l).width));
   const boxW = maxLineW + padX * 2;
   const boxH = lines.length * lineHeight + padY * 2;
-  const boxX = (canvasW - boxW) / 2;
 
-  const pos = clip.textPosition ?? 'bottom';
-  let boxY: number;
-  if (pos === 'top') {
-    boxY = canvasH * 0.08;
-  } else if (pos === 'center') {
-    boxY = (canvasH - boxH) / 2;
+  const centerX = ((clip.textX ?? 50) / 100) * canvasW;
+  let centerY: number;
+  if (clip.textY !== undefined) {
+    centerY = (clip.textY / 100) * canvasH;
   } else {
-    boxY = canvasH - boxH - canvasH * 0.08;
+    const pos = clip.textPosition ?? 'bottom';
+    centerY =
+      pos === 'top'
+        ? canvasH * 0.14
+        : pos === 'center'
+        ? canvasH * 0.5
+        : canvasH * 0.86;
   }
+
+  const boxX = Math.max(8, Math.min(canvasW - boxW - 8, centerX - boxW / 2));
+  const boxY = Math.max(8, Math.min(canvasH - boxH - 8, centerY - boxH / 2));
 
   // Semi-transparent rounded background box
   const bgHex = (clip.textBgColor ?? '#000000').replace('#', '');
@@ -180,9 +186,10 @@ function drawSubtitle(
   ctx.shadowBlur = 4;
   ctx.shadowOffsetY = 2;
 
+  const textCenterX = boxX + boxW / 2;
   lines.forEach((line, i) => {
     const y = boxY + padY + lineHeight * (i + 0.5);
-    ctx.fillText(line, canvasW / 2, y);
+    ctx.fillText(line, textCenterX, y);
   });
 
   ctx.restore();
@@ -206,7 +213,9 @@ function loadMediaElement<T extends HTMLVideoElement | HTMLAudioElement>(
     const el = document.createElement(tag) as T;
     el.crossOrigin = 'anonymous';
     el.preload = 'auto';
-    el.playsInline = true;
+    if (el instanceof HTMLVideoElement) {
+      el.playsInline = true;
+    }
     el.onloadeddata = () => resolve(el);
     el.onerror = () => reject(new Error(`Failed to load ${tag} for export`));
     el.src = url;
@@ -240,7 +249,12 @@ export async function exportTimelineVideo(
   const trackMutedMap = new Map(tracks.map((t) => [t.id, t.muted]));
   const trackOrderMap = new Map<string, number>();
   tracks.forEach((t, index) => {
-    const priority = t.type === 'overlay' ? 100 + index : index;
+    const priority =
+      t.type === 'text'
+        ? 200 + index
+        : t.type === 'image' || t.type === 'overlay'
+        ? 100 + index
+        : index;
     trackOrderMap.set(t.id, priority);
   });
 

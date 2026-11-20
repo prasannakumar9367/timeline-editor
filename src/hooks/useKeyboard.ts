@@ -13,6 +13,8 @@ export function useKeyboard() {
   const setCurrentTime = useEditorStore((s) => s.setCurrentTime);
   const stop = useEditorStore((s) => s.stop);
   const toggleSnap = useEditorStore((s) => s.toggleSnap);
+  const undo = useEditorStore((s) => s.undo);
+  const redo = useEditorStore((s) => s.redo);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -21,6 +23,24 @@ export function useKeyboard() {
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
 
       switch (e.code) {
+        case 'KeyZ':
+          if (e.ctrlKey || e.metaKey) {
+            e.preventDefault();
+            if (e.shiftKey) {
+              redo();
+            } else {
+              undo();
+            }
+          }
+          break;
+
+        case 'KeyY':
+          if (e.ctrlKey || e.metaKey) {
+            e.preventDefault();
+            redo();
+          }
+          break;
+
         case 'Space':
           e.preventDefault();
           togglePlay();
@@ -70,5 +90,5 @@ export function useKeyboard() {
 
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [togglePlay, deleteClip, duplicateClip, selectedClipId, selectClip, setCurrentTime, stop, toggleSnap]);
+  }, [togglePlay, deleteClip, duplicateClip, selectedClipId, selectClip, setCurrentTime, stop, toggleSnap, undo, redo]);
 }

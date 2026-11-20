@@ -18,10 +18,12 @@ export interface MediaItem {
 }
 
 /** A horizontal lane on the timeline. */
+export type TrackType = 'video' | 'audio' | 'image' | 'text' | 'overlay';
+
 export interface Track {
   id: string;
   name: string;
-  type: 'video' | 'audio' | 'overlay';
+  type: TrackType;
   icon: string;
   muted: boolean;
   locked: boolean;
@@ -48,6 +50,8 @@ export interface TimelineClip {
   textColor?: string;     // hex (default '#ffffff')
   textBgColor?: string;   // hex (default '#000000')
   textPosition?: 'top' | 'center' | 'bottom';
+  textX?: number;         // horizontal center position in % (0 – 100, default 50)
+  textY?: number;         // vertical center position in % (0 – 100)
 }
 
 /** Transient state while the user is dragging something. */

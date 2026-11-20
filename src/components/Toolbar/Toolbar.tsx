@@ -26,6 +26,8 @@ export default function Toolbar({ fps = 60 }: ToolbarProps) {
   const snapEnabled = useEditorStore((s) => s.snapEnabled);
   const isSaving = useEditorStore((s) => s.isSaving);
   const clipsCount = useEditorStore((s) => s.clips.length);
+  const canUndo = useEditorStore((s) => s.past.length > 0);
+  const canRedo = useEditorStore((s) => s.future.length > 0);
 
   /* Actions */
   const togglePlay = useEditorStore((s) => s.togglePlay);
@@ -35,6 +37,8 @@ export default function Toolbar({ fps = 60 }: ToolbarProps) {
   const saveProject = useEditorStore((s) => s.saveProject);
   const openExportModal = useEditorStore((s) => s.openExportModal);
   const addSubtitle = useEditorStore((s) => s.addSubtitle);
+  const undo = useEditorStore((s) => s.undo);
+  const redo = useEditorStore((s) => s.redo);
 
   const [justSaved, setJustSaved] = useState(false);
 
@@ -97,6 +101,31 @@ export default function Toolbar({ fps = 60 }: ToolbarProps) {
         >
           <span>💬 + Subtitle</span>
         </button>
+
+        <div className="toolbar-history-group" role="group" aria-label="Undo and Redo">
+          <button
+            type="button"
+            className="toolbar-btn toolbar-history-btn"
+            onClick={undo}
+            disabled={!canUndo}
+            title="Undo (Ctrl+Z)"
+            aria-label="Undo"
+          >
+            <span className="toolbar-btn-icon">↩</span>
+            <span>Undo</span>
+          </button>
+          <button
+            type="button"
+            className="toolbar-btn toolbar-history-btn"
+            onClick={redo}
+            disabled={!canRedo}
+            title="Redo (Ctrl+Y / Ctrl+Shift+Z)"
+            aria-label="Redo"
+          >
+            <span className="toolbar-btn-icon">↪</span>
+            <span>Redo</span>
+          </button>
+        </div>
       </div>
 
       {/* 2. Playback Controls (Center) */}

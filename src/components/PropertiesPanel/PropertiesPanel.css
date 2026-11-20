@@ -582,3 +582,10 @@
   border-color: #4a9eff;
   color: #ffffff;
 }
+
+.props-hint {
+  font-size: 11px;
+  color: #888888;
+  margin-top: 2px;
+  line-height: 1.3;
+}
