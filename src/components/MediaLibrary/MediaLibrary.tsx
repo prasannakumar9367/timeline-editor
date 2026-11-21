@@ -1,15 +1,9 @@
 import React, { useRef, useState } from 'react';
 import { useEditorStore } from '../../store/editorStore';
-import type { MediaItem, MediaType, LibraryDragData } from '../../types/editor';
+import type { MediaItem, LibraryDragData } from '../../types/editor';
 import { formatTime } from '../../utils/time';
+import { FolderIcon, UploadIcon, MediaTypeIcon, CloseIcon } from '../Icons/Icons';
 import './MediaLibrary.css';
-
-const TYPE_ICONS: Record<MediaType, string> = {
-  video: '🎬',
-  audio: '🎙️',
-  image: '🖼️',
-  text: '💬',
-};
 
 const ACCEPTED_FORMATS_TEXT = 'MP4, WebM, MOV • MP3, WAV • PNG, JPG, GIF, WebP';
 const ACCEPTED_MIME_TYPES = 'video/*,audio/*,image/*';
@@ -156,7 +150,7 @@ export default function MediaLibrary(): React.JSX.Element {
           disabled={isUploading}
           title="Import media files from your computer"
         >
-          <span className="media-lib-import-icon">📁</span>
+          <FolderIcon size={13} className="media-lib-import-icon" />
           <span>Import</span>
         </button>
       </header>
@@ -185,7 +179,9 @@ export default function MediaLibrary(): React.JSX.Element {
               }
             }}
           >
-            <div className="media-lib-dropzone-icon">📥</div>
+            <div className="media-lib-dropzone-icon">
+              <UploadIcon size={28} />
+            </div>
             <p className="media-lib-dropzone-prompt">Drop media files here</p>
             <p className="media-lib-dropzone-formats">
               Accepted formats:
@@ -247,7 +243,7 @@ export default function MediaLibrary(): React.JSX.Element {
                       title={item.type}
                       aria-label={item.type}
                     >
-                      {TYPE_ICONS[item.type] ?? '🎬'}
+                      <MediaTypeIcon type={item.type} size={12} />
                     </span>
 
                     {/* Duration badge */}
@@ -274,7 +270,7 @@ export default function MediaLibrary(): React.JSX.Element {
                       title="Remove from library"
                       aria-label={`Remove ${item.name}`}
                     >
-                      ✕
+                      <CloseIcon size={11} />
                     </button>
                   </div>
 

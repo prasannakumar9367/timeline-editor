@@ -227,9 +227,16 @@
 }
 
 .media-lib-dropzone-icon {
-  font-size: 28px;
-  line-height: 1;
-  margin-bottom: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background-color: rgba(74, 158, 255, 0.08);
+  border: 1px solid rgba(74, 158, 255, 0.22);
+  color: var(--ml-accent);
+  margin-bottom: 10px;
 }
 
 .media-lib-dropzone-title {

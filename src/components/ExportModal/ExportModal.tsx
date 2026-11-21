@@ -7,6 +7,7 @@ import {
 } from '../../utils/exporter';
 import type { ExportFormat, ExportResult } from '../../utils/exporter';
 import { formatTime } from '../../utils/time';
+import { DownloadIcon, CloseIcon, CheckIcon } from '../Icons/Icons';
 import './ExportModal.css';
 
 const RESOLUTIONS = [
@@ -150,8 +151,9 @@ export default function ExportModal(): React.JSX.Element | null {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="export-modal-header">
-          <h2 id="export-modal-title" className="export-modal-title">
-            ⬇ Export Video
+          <h2 id="export-modal-title" className="export-modal-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <DownloadIcon size={16} />
+            <span>Export Video</span>
           </h2>
           <button
             type="button"
@@ -159,7 +161,7 @@ export default function ExportModal(): React.JSX.Element | null {
             onClick={handleClose}
             aria-label="Close export modal"
           >
-            ✕
+            <CloseIcon size={14} />
           </button>
         </div>
 
@@ -319,7 +321,10 @@ export default function ExportModal(): React.JSX.Element | null {
                   />
                   <div className="export-success">
                     <div className="export-success-info">
-                      <span>✅ Export complete: <strong>{result.filename}</strong></span>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                        <CheckIcon size={14} />
+                        <span>Export complete: <strong>{result.filename}</strong></span>
+                      </span>
                       <span className="export-success-size">{formatSize(result.sizeBytes)}</span>
                     </div>
                     <button

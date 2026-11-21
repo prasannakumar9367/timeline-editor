@@ -57,6 +57,10 @@
   gap: 8px;
 }
 
+.toolbar-brand-icon {
+  color: #4a9eff;
+}
+
 .toolbar-title {
   font-size: 15px;
   font-weight: 700;
@@ -462,6 +466,7 @@
 .toolbar-export-btn {
   height: 30px;
   padding: 0 12px;
+  gap: 6px;
   font-size: 12px;
   font-weight: 700;
   background-color: #4a9eff;
@@ -479,6 +484,7 @@
 .toolbar-subtitle-btn {
   height: 28px;
   padding: 0 10px;
+  gap: 6px;
   font-size: 12px;
   font-weight: 600;
   white-space: nowrap;

@@ -2,6 +2,7 @@ import React, { useRef } from 'react';
 import { useEditorStore } from '../../store/editorStore';
 import type { TimelineClip as ClipType } from '../../types/editor';
 import { AudioWaveform } from './AudioWaveform';
+import { AudioIcon, TextIcon } from '../Icons/Icons';
 
 interface TimelineClipProps {
   clip: ClipType;
@@ -188,9 +189,11 @@ export const TimelineClip: React.FC<TimelineClipProps> = ({ clip }) => {
       {/* Clip Content */}
       <div className={`timeline-clip-body ${isAudio ? 'timeline-clip-body-audio' : ''}`}>
         {clip.mediaType === 'text' ? (
-          <span style={{ fontSize: '14px', flexShrink: 0 }}>💬</span>
+          <TextIcon size={14} />
         ) : isAudio ? (
-          <span className="timeline-clip-audio-badge">🎵</span>
+          <span className="timeline-clip-audio-badge">
+            <AudioIcon size={12} />
+          </span>
         ) : clip.thumbnail ? (
           <img
             src={clip.thumbnail}

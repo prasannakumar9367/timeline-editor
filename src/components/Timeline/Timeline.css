@@ -88,6 +88,9 @@
   text-align: left;
   padding: 6px 10px;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   transition: background 0.15s ease;
 }
 
@@ -119,7 +122,10 @@
 }
 
 .timeline-track-icon {
-  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #8c939e;
   flex-shrink: 0;
 }
 

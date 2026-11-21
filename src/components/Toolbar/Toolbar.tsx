@@ -2,6 +2,21 @@ import { useState, type ChangeEvent } from 'react';
 import { useEditorStore } from '../../store/editorStore';
 import type { TimelineClip } from '../../types/editor';
 import { formatTime } from '../../utils/time';
+import {
+  FilmIcon,
+  SaveIcon,
+  CheckIcon,
+  TextIcon,
+  UndoIcon,
+  RedoIcon,
+  StopIcon,
+  PlayIcon,
+  PauseIcon,
+  MagnetIcon,
+  DownloadIcon,
+  MinusIcon,
+  PlusIcon,
+} from '../Icons/Icons';
 import './Toolbar.css';
 
 export interface ToolbarProps {
@@ -80,7 +95,8 @@ export default function Toolbar({ fps = 60 }: ToolbarProps) {
       {/* 1. App Title / Logo Area (Left) */}
       <div className="toolbar-left">
         <div className="toolbar-brand">
-          <span className="toolbar-title">🎬 Timeline Editor</span>
+          <FilmIcon size={17} className="toolbar-brand-icon" />
+          <span className="toolbar-title">Timeline Editor</span>
         </div>
 
         <button
@@ -90,7 +106,8 @@ export default function Toolbar({ fps = 60 }: ToolbarProps) {
           disabled={isSaving}
           title="Save project & media locally in browser"
         >
-          <span>{isSaving ? '⏳ Saving…' : justSaved ? '✓ Saved' : '💾 Save'}</span>
+          {justSaved ? <CheckIcon size={14} /> : <SaveIcon size={14} />}
+          <span>{isSaving ? 'Saving…' : justSaved ? 'Saved' : 'Save'}</span>
         </button>
 
         <button
@@ -99,7 +116,8 @@ export default function Toolbar({ fps = 60 }: ToolbarProps) {
           onClick={() => addSubtitle()}
           title="Add a subtitle caption at the current playhead"
         >
-          <span>💬 + Subtitle</span>
+          <TextIcon size={14} />
+          <span>+ Subtitle</span>
         </button>
 
         <div className="toolbar-history-group" role="group" aria-label="Undo and Redo">
@@ -111,7 +129,7 @@ export default function Toolbar({ fps = 60 }: ToolbarProps) {
             title="Undo (Ctrl+Z)"
             aria-label="Undo"
           >
-            <span className="toolbar-btn-icon">↩</span>
+            <UndoIcon size={14} />
             <span>Undo</span>
           </button>
           <button
@@ -122,7 +140,7 @@ export default function Toolbar({ fps = 60 }: ToolbarProps) {
             title="Redo (Ctrl+Y / Ctrl+Shift+Z)"
             aria-label="Redo"
           >
-            <span className="toolbar-btn-icon">↪</span>
+            <RedoIcon size={14} />
             <span>Redo</span>
           </button>
         </div>
@@ -138,7 +156,7 @@ export default function Toolbar({ fps = 60 }: ToolbarProps) {
             title="Stop (Reset to start)"
             aria-label="Stop playback"
           >
-            <span className="toolbar-btn-icon">⏹</span>
+            <StopIcon size={12} />
           </button>
 
           <button
@@ -150,7 +168,7 @@ export default function Toolbar({ fps = 60 }: ToolbarProps) {
             title={isPlaying ? 'Pause (Space)' : 'Play (Space)'}
             aria-label={isPlaying ? 'Pause' : 'Play'}
           >
-            <span className="toolbar-btn-icon">{isPlaying ? '⏸' : '▶'}</span>
+            {isPlaying ? <PauseIcon size={13} /> : <PlayIcon size={13} />}
           </button>
         </div>
 
@@ -187,7 +205,7 @@ export default function Toolbar({ fps = 60 }: ToolbarProps) {
           aria-pressed={snapEnabled}
           aria-label="Toggle snap to grid"
         >
-          <span className="toolbar-snap-icon">🧲</span>
+          <MagnetIcon size={14} className="toolbar-snap-icon" />
           <span className="toolbar-snap-label toolbar-snap-text">Snap</span>
         </button>
 
@@ -204,7 +222,7 @@ export default function Toolbar({ fps = 60 }: ToolbarProps) {
             title="Zoom out (−)"
             aria-label="Zoom out"
           >
-            −
+            <MinusIcon size={12} />
           </button>
           <input
             type="range"
@@ -225,7 +243,7 @@ export default function Toolbar({ fps = 60 }: ToolbarProps) {
             title="Zoom in (+)"
             aria-label="Zoom in"
           >
-            +
+            <PlusIcon size={12} />
           </button>
           <span
             className="toolbar-zoom-level toolbar-zoom-value"
@@ -248,7 +266,8 @@ export default function Toolbar({ fps = 60 }: ToolbarProps) {
               : 'Export timeline as video'
           }
         >
-          <span>⬇ Export</span>
+          <DownloadIcon size={14} />
+          <span>Export</span>
         </button>
       </div>
     </header>

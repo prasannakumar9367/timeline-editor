@@ -3,30 +3,27 @@ import { useEditorStore } from '../../store/editorStore';
 import type { MediaType } from '../../types/editor';
 import { formatTime } from '../../utils/time';
 import { getTextCoords } from '../Preview/Preview';
+import { MediaTypeIcon, CopyIcon, TrashIcon } from '../Icons/Icons';
 import './PropertiesPanel.css';
 
 /**
  * Media type badge metadata
  */
-const MEDIA_TYPE_CONFIG: Record<MediaType, { label: string; icon: string; className: string }> = {
+const MEDIA_TYPE_CONFIG: Record<MediaType, { label: string; className: string }> = {
   video: {
     label: 'Video',
-    icon: '🎬',
     className: 'props-badge-video',
   },
   audio: {
     label: 'Audio',
-    icon: '🎙️',
     className: 'props-badge-audio',
   },
   image: {
     label: 'Image',
-    icon: '🖼️',
     className: 'props-badge-image',
   },
   text: {
     label: 'Subtitle',
-    icon: '💬',
     className: 'props-badge-text',
   },
 };
@@ -156,7 +153,6 @@ const PropertiesPanel: React.FC = () => {
 
   const mediaTypeInfo = MEDIA_TYPE_CONFIG[selectedClip.mediaType] ?? {
     label: selectedClip.mediaType,
-    icon: '📄',
     className: '',
   };
 
@@ -350,7 +346,9 @@ const PropertiesPanel: React.FC = () => {
             <div className="props-field props-col">
               <span className="props-field-label">Media Type</span>
               <div className={`props-badge ${mediaTypeInfo.className}`}>
-                <span className="props-badge-icon">{mediaTypeInfo.icon}</span>
+                <span className="props-badge-icon">
+                  <MediaTypeIcon type={selectedClip.mediaType} size={13} />
+                </span>
                 <span className="props-badge-text">{mediaTypeInfo.label}</span>
               </div>
             </div>
@@ -517,7 +515,8 @@ const PropertiesPanel: React.FC = () => {
               onClick={() => duplicateClip(selectedClip.id)}
               title="Duplicate selected clip"
             >
-              📋 Duplicate
+              <CopyIcon size={13} />
+              <span>Duplicate</span>
             </button>
             <button
               type="button"
@@ -525,7 +524,8 @@ const PropertiesPanel: React.FC = () => {
               onClick={() => deleteClip(selectedClip.id)}
               title="Delete selected clip"
             >
-              🗑️ Delete
+              <TrashIcon size={13} />
+              <span>Delete</span>
             </button>
           </div>
         </section>
@@ -566,7 +566,7 @@ const PropertiesPanel: React.FC = () => {
                 ) : (
                   <div className="props-thumbnail-fallback">
                     <span className="props-thumbnail-fallback-icon">
-                      {mediaTypeInfo.icon}
+                      <MediaTypeIcon type={selectedClip.mediaType} size={22} />
                     </span>
                     <span className="props-thumbnail-fallback-text">
                       No thumbnail

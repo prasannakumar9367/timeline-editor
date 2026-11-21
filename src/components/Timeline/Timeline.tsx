@@ -3,6 +3,18 @@ import './Timeline.css';
 import { useEditorStore } from '../../store/editorStore';
 import { TimelineRuler } from './TimelineRuler';
 import { TimelineTrack } from './TimelineTrack';
+import {
+  MediaTypeIcon,
+  FilmIcon,
+  AudioIcon,
+  ImageIcon,
+  TextIcon,
+  VolumeOnIcon,
+  VolumeOffIcon,
+  LockIcon,
+  UnlockIcon,
+  CloseIcon,
+} from '../Icons/Icons';
 
 export default function Timeline() {
   const tracks = useEditorStore((s) => s.tracks);
@@ -86,7 +98,8 @@ export default function Timeline() {
                     setAddMenuOpen(false);
                   }}
                 >
-                  🎬 Add Video Track
+                  <FilmIcon size={13} />
+                  <span>Add Video Track</span>
                 </button>
                 <button
                   type="button"
@@ -95,7 +108,8 @@ export default function Timeline() {
                     setAddMenuOpen(false);
                   }}
                 >
-                  🎙️ Add Audio Track
+                  <AudioIcon size={13} />
+                  <span>Add Audio Track</span>
                 </button>
                 <button
                   type="button"
@@ -104,7 +118,8 @@ export default function Timeline() {
                     setAddMenuOpen(false);
                   }}
                 >
-                  🖼️ Add Image Track
+                  <ImageIcon size={13} />
+                  <span>Add Image Track</span>
                 </button>
                 <button
                   type="button"
@@ -113,7 +128,8 @@ export default function Timeline() {
                     setAddMenuOpen(false);
                   }}
                 >
-                  💬 Add Text Track
+                  <TextIcon size={13} />
+                  <span>Add Text Track</span>
                 </button>
               </div>
             )}
@@ -125,7 +141,9 @@ export default function Timeline() {
           {tracks.map((t) => (
             <div key={t.id} className="timeline-track-header">
               <div className="timeline-track-info">
-                <span className="timeline-track-icon">{t.icon}</span>
+                <span className="timeline-track-icon">
+                  <MediaTypeIcon type={t.type} size={14} />
+                </span>
                 <span className="timeline-track-name" title={t.name}>
                   {t.name}
                 </span>
@@ -140,7 +158,7 @@ export default function Timeline() {
                   }}
                   title={t.muted ? 'Unmute track' : 'Mute track'}
                 >
-                  {t.muted ? '🔇' : '🔊'}
+                  {t.muted ? <VolumeOffIcon size={13} /> : <VolumeOnIcon size={13} />}
                 </button>
                 <button
                   type="button"
@@ -151,7 +169,7 @@ export default function Timeline() {
                   }}
                   title={t.locked ? 'Unlock track' : 'Lock track'}
                 >
-                  {t.locked ? '🔒' : '🔓'}
+                  {t.locked ? <LockIcon size={13} /> : <UnlockIcon size={13} />}
                 </button>
                 {tracks.length > 1 && (
                   <button
@@ -163,7 +181,7 @@ export default function Timeline() {
                     }}
                     title="Remove track"
                   >
-                    ✕
+                    <CloseIcon size={12} />
                   </button>
                 )}
               </div>
