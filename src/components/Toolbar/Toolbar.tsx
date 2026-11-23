@@ -1,7 +1,6 @@
 import { useState, type ChangeEvent } from 'react';
 import { useEditorStore } from '../../store/editorStore';
 import type { TimelineClip } from '../../types/editor';
-import { formatTime } from '../../utils/time';
 import {
   FilmIcon,
   SaveIcon,
@@ -9,9 +8,6 @@ import {
   TextIcon,
   UndoIcon,
   RedoIcon,
-  StopIcon,
-  PlayIcon,
-  PauseIcon,
   MagnetIcon,
   DownloadIcon,
   MinusIcon,
@@ -33,10 +29,7 @@ const formatZoom = (val: number): string => {
 };
 
 export default function Toolbar({ fps = 60 }: ToolbarProps) {
-  /* Playback & timeline state */
-  const currentTime = useEditorStore((s) => s.currentTime);
-  const duration = useEditorStore((s) => s.duration);
-  const isPlaying = useEditorStore((s) => s.isPlaying);
+  /* Timeline state */
   const zoom = useEditorStore((s) => s.zoom);
   const snapEnabled = useEditorStore((s) => s.snapEnabled);
   const isSaving = useEditorStore((s) => s.isSaving);
@@ -45,8 +38,6 @@ export default function Toolbar({ fps = 60 }: ToolbarProps) {
   const canRedo = useEditorStore((s) => s.future.length > 0);
 
   /* Actions */
-  const togglePlay = useEditorStore((s) => s.togglePlay);
-  const stop = useEditorStore((s) => s.stop);
   const setZoom = useEditorStore((s) => s.setZoom);
   const toggleSnap = useEditorStore((s) => s.toggleSnap);
   const saveProject = useEditorStore((s) => s.saveProject);
@@ -146,40 +137,7 @@ export default function Toolbar({ fps = 60 }: ToolbarProps) {
         </div>
       </div>
 
-      {/* 2. Playback Controls (Center) */}
-      <div className="toolbar-center">
-        <div className="toolbar-playback">
-          <button
-            type="button"
-            className="toolbar-btn toolbar-btn-stop"
-            onClick={stop}
-            title="Stop (Reset to start)"
-            aria-label="Stop playback"
-          >
-            <StopIcon size={12} />
-          </button>
-
-          <button
-            type="button"
-            className={`toolbar-btn toolbar-btn-play ${
-              isPlaying ? 'toolbar-btn-play--active' : ''
-            }`}
-            onClick={togglePlay}
-            title={isPlaying ? 'Pause (Space)' : 'Play (Space)'}
-            aria-label={isPlaying ? 'Pause' : 'Play'}
-          >
-            {isPlaying ? <PauseIcon size={13} /> : <PlayIcon size={13} />}
-          </button>
-        </div>
-
-        <div className="toolbar-time" title="Current time / Total duration">
-          <span className="toolbar-time-current">{formatTime(currentTime)}</span>
-          <span className="toolbar-time-separator toolbar-time-divider">/</span>
-          <span className="toolbar-time-total toolbar-time-duration">
-            {formatTime(duration)}
-          </span>
-        </div>
-      </div>
+     
 
       {/* 3. Right Side: FPS, Snap Toggle, Zoom Controls */}
       <div className="toolbar-right">

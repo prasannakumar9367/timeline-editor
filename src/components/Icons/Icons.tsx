@@ -201,6 +201,51 @@ export const MinusIcon: React.FC<IconProps> = ({ size = 13, className }) => (
   </svg>
 );
 
+export const ScissorsIcon: React.FC<IconProps> = ({ size = 16, className }) => (
+  <svg {...baseProps(size, className)}>
+    <circle cx="6" cy="6" r="3" />
+    <circle cx="6" cy="18" r="3" />
+    <line x1="20" y1="4" x2="8.12" y2="15.88" />
+    <line x1="14.47" y1="14.48" x2="20" y2="20" />
+    <line x1="8.12" y1="8.12" x2="12" y2="12" />
+  </svg>
+);
+
+export const LayerUpIcon: React.FC<IconProps> = ({ size = 16, className }) => (
+  <svg {...baseProps(size, className)}>
+    <polyline points="7 12 12 7 17 12" />
+    <line x1="5" y1="17" x2="19" y2="17" />
+  </svg>
+);
+
+export const LayerDownIcon: React.FC<IconProps> = ({ size = 16, className }) => (
+  <svg {...baseProps(size, className)}>
+    <line x1="5" y1="7" x2="19" y2="7" />
+    <polyline points="7 12 12 17 17 12" />
+  </svg>
+);
+
+export const SkipBackIcon: React.FC<IconProps> = ({ size = 15, className }) => (
+  <svg {...baseProps(size, className)} fill="currentColor">
+    <polygon points="18 5 8 12 18 19 18 5" />
+    <line x1="6" y1="5" x2="6" y2="19" strokeWidth={2.2} />
+  </svg>
+);
+
+export const SkipForwardIcon: React.FC<IconProps> = ({ size = 15, className }) => (
+  <svg {...baseProps(size, className)} fill="currentColor">
+    <polygon points="6 5 16 12 6 19 6 5" />
+    <line x1="18" y1="5" x2="18" y2="19" strokeWidth={2.2} />
+  </svg>
+);
+
+export const CropIcon: React.FC<IconProps> = ({ size = 16, className }) => (
+  <svg {...baseProps(size, className)}>
+    <path d="M6 2v14a2 2 0 0 0 2 2h14" />
+    <path d="M18 22V8a2 2 0 0 0-2-2H2" />
+  </svg>
+);
+
 export const MediaTypeIcon: React.FC<{
   type: MediaType | TrackType;
   size?: number;

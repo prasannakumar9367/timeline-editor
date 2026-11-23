@@ -3,7 +3,7 @@ import { useEditorStore } from '../../store/editorStore';
 import type { MediaType } from '../../types/editor';
 import { formatTime } from '../../utils/time';
 import { getTextCoords } from '../Preview/Preview';
-import { MediaTypeIcon, CopyIcon, TrashIcon } from '../Icons/Icons';
+import { MediaTypeIcon, CopyIcon, TrashIcon, CropIcon } from '../Icons/Icons';
 import './PropertiesPanel.css';
 
 /**
@@ -40,6 +40,8 @@ const PropertiesPanel: React.FC = () => {
   const deleteClip = useEditorStore((state) => state.deleteClip);
   const duplicateClip = useEditorStore((state) => state.duplicateClip);
   const recordHistory = useEditorStore((state) => state.recordHistory);
+  const isCropMode = useEditorStore((state) => state.isCropMode);
+  const toggleCropMode = useEditorStore((state) => state.toggleCropMode);
 
   // Track whether we already recorded an undo snapshot for the current input focus session
   const inputHistoryRecordedRef = useRef(false);
@@ -162,7 +164,15 @@ const PropertiesPanel: React.FC = () => {
     selectedClip.mediaType === 'video' ||
     selectedClip.mediaType === 'image' ||
     selectedClip.mediaType === 'text';
+  const isCroppable =
+    selectedClip.mediaType === 'video' || selectedClip.mediaType === 'image';
   const isTextClip = selectedClip.mediaType === 'text';
+
+  const cropTop = selectedClip.cropTop ?? 0;
+  const cropRight = selectedClip.cropRight ?? 0;
+  const cropBottom = selectedClip.cropBottom ?? 0;
+  const cropLeft = selectedClip.cropLeft ?? 0;
+  const hasCrop = cropTop > 0 || cropRight > 0 || cropBottom > 0 || cropLeft > 0;
 
   const volumePercent = Math.round((selectedClip.volume ?? 1) * 100);
   const opacityPercent = Math.round((selectedClip.opacity ?? 1) * 100);
@@ -502,6 +512,78 @@ const PropertiesPanel: React.FC = () => {
                 />
               </div>
             )}
+          </section>
+        )}
+
+        {/* ── 3b. Crop Section (Video & Image clips) ── */}
+        {isCroppable && (
+          <section className="props-section">
+            <h3 className="props-section-header">Crop</h3>
+
+            <div className="props-actions-group">
+              <button
+                type="button"
+                className={`props-btn props-btn-crop ${isCropMode ? 'active' : ''}`}
+                onClick={toggleCropMode}
+                title="Toggle interactive crop handles in preview"
+              >
+                <CropIcon size={13} />
+                <span>{isCropMode ? 'Done Cropping' : 'Crop in Preview'}</span>
+              </button>
+              <button
+                type="button"
+                className="props-btn props-btn-duplicate"
+                disabled={!hasCrop}
+                onClick={() =>
+                  updateClip(selectedClip.id, {
+                    cropTop: 0,
+                    cropRight: 0,
+                    cropBottom: 0,
+                    cropLeft: 0,
+                  })
+                }
+                title="Reset crop to full frame"
+              >
+                Reset
+              </button>
+            </div>
+
+            <div className="props-crop-grid">
+              {(
+                [
+                  { label: 'Top', key: 'cropTop', value: cropTop, max: Math.max(0, 90 - cropBottom) },
+                  { label: 'Bottom', key: 'cropBottom', value: cropBottom, max: Math.max(0, 90 - cropTop) },
+                  { label: 'Left', key: 'cropLeft', value: cropLeft, max: Math.max(0, 90 - cropRight) },
+                  { label: 'Right', key: 'cropRight', value: cropRight, max: Math.max(0, 90 - cropLeft) },
+                ] as const
+              ).map(({ label, key, value, max }) => (
+                <div key={key} className="props-field">
+                  <div className="props-field-header">
+                    <label className="props-field-label" htmlFor={`props-${key}`}>
+                      {label}
+                    </label>
+                    <span className="props-range-value">{Math.round(value)}%</span>
+                  </div>
+                  <input
+                    id={`props-${key}`}
+                    type="range"
+                    min={0}
+                    max={Math.min(45, Math.round(max))}
+                    step={1}
+                    className="props-range-slider"
+                    value={Math.round(value)}
+                    onPointerDown={recordHistory}
+                    onChange={(e) =>
+                      updateClip(
+                        selectedClip.id,
+                        { [key]: Number(e.target.value) },
+                        { recordHistory: false }
+                      )
+                    }
+                  />
+                </div>
+              ))}
+            </div>
           </section>
         )}
 

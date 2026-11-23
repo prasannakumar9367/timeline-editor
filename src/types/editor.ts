@@ -53,6 +53,12 @@ export interface TimelineClip {
   textPosition?: 'top' | 'center' | 'bottom';
   textX?: number;         // horizontal center position in % (0 – 100, default 50)
   textY?: number;         // vertical center position in % (0 – 100)
+
+  /* Crop insets in % of preview frame (0 – 45 per edge) */
+  cropTop?: number;
+  cropRight?: number;
+  cropBottom?: number;
+  cropLeft?: number;
 }
 
 /** Transient state while the user is dragging something. */

@@ -1,6 +1,6 @@
 import React, { useRef, useMemo } from 'react';
 import { useEditorStore } from '../../store/editorStore';
-import { formatTime } from '../../utils/time';
+import { formatRulerTime } from '../../utils/time';
 
 interface TimelineRulerProps {
   totalWidth: number;
@@ -16,13 +16,13 @@ export const TimelineRuler: React.FC<TimelineRulerProps> = ({ totalWidth }) => {
   // Compute tick interval based on zoom (pixelsPerSecond)
   const { majorInterval, minorInterval } = useMemo(() => {
     if (pixelsPerSecond < 30) {
-      return { majorInterval: 10, minorInterval: 2 };
-    } else if (pixelsPerSecond < 60) {
-      return { majorInterval: 5, minorInterval: 1 };
+      return { majorInterval: 10, minorInterval: 5 };
+    } else if (pixelsPerSecond < 55) {
+      return { majorInterval: 4, minorInterval: 2 };
     } else if (pixelsPerSecond < 140) {
-      return { majorInterval: 2, minorInterval: 0.5 };
+      return { majorInterval: 2, minorInterval: 1 };
     } else {
-      return { majorInterval: 1, minorInterval: 0.25 };
+      return { majorInterval: 1, minorInterval: 0.5 };
     }
   }, [pixelsPerSecond]);
 
@@ -38,7 +38,7 @@ export const TimelineRuler: React.FC<TimelineRulerProps> = ({ totalWidth }) => {
       list.push({
         time,
         isMajor,
-        label: isMajor ? formatTime(time) : undefined,
+        label: isMajor ? formatRulerTime(time) : undefined,
       });
     }
     return list;

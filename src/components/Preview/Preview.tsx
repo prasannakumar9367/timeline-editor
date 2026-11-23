@@ -22,11 +22,13 @@ export default function Preview() {
   const mediaItems = useEditorStore((s) => s.mediaItems);
   const selectedClipId = useEditorStore((s) => s.selectedClipId);
   const selectedMediaId = useEditorStore((s) => s.selectedMediaId);
+  const isCropMode = useEditorStore((s) => s.isCropMode);
   const togglePlay = useEditorStore((s) => s.togglePlay);
   const addClip = useEditorStore((s) => s.addClip);
   const selectClip = useEditorStore((s) => s.selectClip);
   const updateClip = useEditorStore((s) => s.updateClip);
   const recordHistory = useEditorStore((s) => s.recordHistory);
+  const setCropMode = useEditorStore((s) => s.setCropMode);
 
   const screenRef = useRef<HTMLDivElement>(null);
 
@@ -102,14 +104,22 @@ export default function Preview() {
     () => visualClips.find((c) => c.id === selectedClipId) ?? null,
     [visualClips, selectedClipId]
   );
+  const activeCropClip =
+    isCropMode &&
+    selectedActiveClip &&
+    (selectedActiveClip.mediaType === 'video' || selectedActiveClip.mediaType === 'image')
+      ? selectedActiveClip
+      : null;
 
   return (
     <div className="preview-container">
       <div
         ref={screenRef}
         className={`preview-screen ${selectedActiveClip ? 'preview-screen--has-selection' : ''}`}
-        onClick={togglePlay}
-        title="Click to Play / Pause (Space)"
+        onClick={() => {
+          if (!activeCropClip) togglePlay();
+        }}
+        title={activeCropClip ? 'Drag crop handles to crop' : 'Click to Play / Pause (Space)'}
       >
         {/* Case 1: Active timeline visual clips */}
         {visualClips.length > 0 ? (
@@ -142,6 +152,7 @@ export default function Preview() {
                 isPlaying={isPlaying}
                 zIndex={index + 1}
                 isSelected={isSelected}
+                isCropping={activeCropClip?.id === clip.id}
               />
             );
           })
@@ -223,7 +234,7 @@ export default function Preview() {
         )}
 
         {/* Selected Clip Highlight Badge */}
-        {selectedActiveClip && (
+        {selectedActiveClip && !activeCropClip && (
           <div className="preview-selected-badge">
             <span className="preview-selected-dot" />
             <span className="preview-selected-label">
@@ -231,6 +242,27 @@ export default function Preview() {
               {selectedActiveClip.mediaType === 'text' ? ' · Drag to move' : ''}
             </span>
           </div>
+        )}
+
+        {/* Interactive Crop Overlay */}
+        {activeCropClip && (
+          <CropOverlay
+            clip={activeCropClip}
+            screenRef={screenRef}
+            onCropStart={recordHistory}
+            onCropChange={(updates) =>
+              updateClip(activeCropClip.id, updates, { recordHistory: false })
+            }
+            onReset={() =>
+              updateClip(activeCropClip.id, {
+                cropTop: 0,
+                cropRight: 0,
+                cropBottom: 0,
+                cropLeft: 0,
+              })
+            }
+            onDone={() => setCropMode(false)}
+          />
         )}
 
         {/* Timecode Badge */}
@@ -371,6 +403,7 @@ interface VisualProps {
   isPlaying: boolean;
   zIndex: number;
   isSelected: boolean;
+  isCropping: boolean;
 }
 
 function VisualClipRenderer({
@@ -380,6 +413,7 @@ function VisualClipRenderer({
   isPlaying,
   zIndex,
   isSelected,
+  isCropping,
 }: VisualProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -406,18 +440,35 @@ function VisualClipRenderer({
     }
   }, [isPlaying, clip.mediaType]);
 
-  const highlightOverlay = isSelected ? (
-    <div
-      className="preview-clip-highlight"
-      style={{ zIndex: zIndex + 15 }}
-      aria-hidden="true"
-    >
-      <span className="preview-corner preview-corner-tl" />
-      <span className="preview-corner preview-corner-tr" />
-      <span className="preview-corner preview-corner-bl" />
-      <span className="preview-corner preview-corner-br" />
-    </div>
-  ) : null;
+  const cropTop = clip.cropTop ?? 0;
+  const cropRight = clip.cropRight ?? 0;
+  const cropBottom = clip.cropBottom ?? 0;
+  const cropLeft = clip.cropLeft ?? 0;
+  const hasCrop = cropTop > 0 || cropRight > 0 || cropBottom > 0 || cropLeft > 0;
+  const clipPathValue =
+    !isCropping && hasCrop
+      ? `inset(${cropTop}% ${cropRight}% ${cropBottom}% ${cropLeft}%)`
+      : undefined;
+
+  const highlightOverlay =
+    isSelected && !isCropping ? (
+      <div
+        className="preview-clip-highlight"
+        style={{
+          zIndex: zIndex + 15,
+          top: hasCrop ? `${cropTop}%` : '4px',
+          right: hasCrop ? `${cropRight}%` : '4px',
+          bottom: hasCrop ? `${cropBottom}%` : '4px',
+          left: hasCrop ? `${cropLeft}%` : '4px',
+        }}
+        aria-hidden="true"
+      >
+        <span className="preview-corner preview-corner-tl" />
+        <span className="preview-corner preview-corner-tr" />
+        <span className="preview-corner preview-corner-bl" />
+        <span className="preview-corner preview-corner-br" />
+      </div>
+    ) : null;
 
   if (clip.mediaType === 'image') {
     return (
@@ -426,7 +477,7 @@ function VisualClipRenderer({
           src={media.url}
           alt={clip.label}
           className="preview-media preview-image"
-          style={{ opacity: clip.opacity, zIndex }}
+          style={{ opacity: clip.opacity, zIndex, clipPath: clipPathValue }}
         />
         {highlightOverlay}
       </>
@@ -439,7 +490,7 @@ function VisualClipRenderer({
         ref={videoRef}
         src={media.url}
         className="preview-media preview-video"
-        style={{ opacity: clip.opacity, zIndex }}
+        style={{ opacity: clip.opacity, zIndex, clipPath: clipPathValue }}
         playsInline
         muted={false}
         onLoadedMetadata={() => {
@@ -451,6 +502,136 @@ function VisualClipRenderer({
       />
       {highlightOverlay}
     </>
+  );
+}
+
+/* ──────────────── Interactive Crop Overlay ──────────────── */
+type CropHandle = 'n' | 's' | 'e' | 'w' | 'nw' | 'ne' | 'sw' | 'se';
+
+interface CropOverlayProps {
+  clip: TimelineClip;
+  screenRef: React.RefObject<HTMLDivElement | null>;
+  onCropStart: () => void;
+  onCropChange: (updates: Partial<TimelineClip>) => void;
+  onReset: () => void;
+  onDone: () => void;
+}
+
+function CropOverlay({
+  clip,
+  screenRef,
+  onCropStart,
+  onCropChange,
+  onReset,
+  onDone,
+}: CropOverlayProps) {
+  const top = clip.cropTop ?? 0;
+  const right = clip.cropRight ?? 0;
+  const bottom = clip.cropBottom ?? 0;
+  const left = clip.cropLeft ?? 0;
+
+  const startHandleDrag = (handle: CropHandle) => (e: React.PointerEvent) => {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+
+    const screenEl = screenRef.current;
+    if (!screenEl) return;
+    const rect = screenEl.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
+
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const init = { top, right, bottom, left };
+    let recorded = false;
+    const MIN_VISIBLE = 10;
+
+    const onPointerMove = (ev: PointerEvent) => {
+      const dxPct = ((ev.clientX - startX) / rect.width) * 100;
+      const dyPct = ((ev.clientY - startY) / rect.height) * 100;
+
+      if (!recorded && (Math.abs(ev.clientX - startX) > 1 || Math.abs(ev.clientY - startY) > 1)) {
+        onCropStart();
+        recorded = true;
+      }
+      if (!recorded) return;
+
+      const next: Partial<TimelineClip> = {};
+      if (handle.includes('n')) {
+        const val = Math.max(0, Math.min(100 - MIN_VISIBLE - init.bottom, init.top + dyPct));
+        next.cropTop = Math.round(val * 10) / 10;
+      }
+      if (handle.includes('s')) {
+        const val = Math.max(0, Math.min(100 - MIN_VISIBLE - init.top, init.bottom - dyPct));
+        next.cropBottom = Math.round(val * 10) / 10;
+      }
+      if (handle.includes('w')) {
+        const val = Math.max(0, Math.min(100 - MIN_VISIBLE - init.right, init.left + dxPct));
+        next.cropLeft = Math.round(val * 10) / 10;
+      }
+      if (handle.includes('e')) {
+        const val = Math.max(0, Math.min(100 - MIN_VISIBLE - init.left, init.right - dxPct));
+        next.cropRight = Math.round(val * 10) / 10;
+      }
+      onCropChange(next);
+    };
+
+    const onPointerUp = () => {
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+    };
+
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
+  };
+
+  return (
+    <div
+      className="preview-crop-overlay"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div
+        className="preview-crop-box"
+        style={{
+          top: `${top}%`,
+          right: `${right}%`,
+          bottom: `${bottom}%`,
+          left: `${left}%`,
+        }}
+      >
+        {/* Rule of thirds grid */}
+        <div className="preview-crop-grid" aria-hidden="true">
+          <span className="preview-crop-grid-v1" />
+          <span className="preview-crop-grid-v2" />
+          <span className="preview-crop-grid-h1" />
+          <span className="preview-crop-grid-h2" />
+        </div>
+
+        {/* Edge handles */}
+        <div className="preview-crop-edge preview-crop-edge-n" onPointerDown={startHandleDrag('n')} />
+        <div className="preview-crop-edge preview-crop-edge-s" onPointerDown={startHandleDrag('s')} />
+        <div className="preview-crop-edge preview-crop-edge-w" onPointerDown={startHandleDrag('w')} />
+        <div className="preview-crop-edge preview-crop-edge-e" onPointerDown={startHandleDrag('e')} />
+
+        {/* Corner handles */}
+        <div className="preview-crop-corner preview-crop-corner-nw" onPointerDown={startHandleDrag('nw')} />
+        <div className="preview-crop-corner preview-crop-corner-ne" onPointerDown={startHandleDrag('ne')} />
+        <div className="preview-crop-corner preview-crop-corner-sw" onPointerDown={startHandleDrag('sw')} />
+        <div className="preview-crop-corner preview-crop-corner-se" onPointerDown={startHandleDrag('se')} />
+      </div>
+
+      {/* Floating Crop Mode Toolbar */}
+      <div className="preview-crop-bar">
+        <span className="preview-crop-bar-label">
+          Crop ({Math.round(100 - left - right)}% × {Math.round(100 - top - bottom)}%)
+        </span>
+        <button type="button" className="preview-crop-bar-btn" onClick={onReset}>
+          Reset
+        </button>
+        <button type="button" className="preview-crop-bar-btn preview-crop-bar-btn-primary" onClick={onDone}>
+          Done
+        </button>
+      </div>
+    </div>
   );
 }
 

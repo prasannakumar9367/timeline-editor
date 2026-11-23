@@ -22,6 +22,7 @@ export const TimelineClip: React.FC<TimelineClipProps> = ({ clip }) => {
 
   const isSelected = selectedClipId === clip.id;
   const isAudio = clip.mediaType === 'audio';
+  const isFilmstrip = (clip.mediaType === 'video' || clip.mediaType === 'image') && Boolean(clip.thumbnail);
   const leftPx = clip.startTime * pixelsPerSecond;
   const widthPx = Math.max(12, clip.duration * pixelsPerSecond);
 
@@ -153,11 +154,11 @@ export const TimelineClip: React.FC<TimelineClipProps> = ({ clip }) => {
     <div
       className={`timeline-clip ${isSelected ? 'timeline-clip-selected' : ''} ${
         isAudio ? 'timeline-clip-audio' : ''
-      }`}
+      } ${isFilmstrip ? 'timeline-clip-filmstrip' : ''}`}
       style={{
         left: `${leftPx}px`,
         width: `${widthPx}px`,
-        backgroundColor: isAudio ? undefined : clip.color,
+        backgroundColor: isAudio || isFilmstrip ? undefined : clip.color,
         borderColor: isAudio ? clip.color : undefined,
         opacity: clip.opacity,
       }}
@@ -167,6 +168,15 @@ export const TimelineClip: React.FC<TimelineClipProps> = ({ clip }) => {
         selectClip(clip.id);
       }}
     >
+      {/* Filmstrip Background for Video / Image Clips */}
+      {isFilmstrip && (
+        <div
+          className="timeline-clip-filmstrip-bg"
+          style={{ backgroundImage: `url(${clip.thumbnail})` }}
+          aria-hidden="true"
+        />
+      )}
+
       {/* Audio Waveform Background */}
       {isAudio && (
         <AudioWaveform
@@ -187,20 +197,17 @@ export const TimelineClip: React.FC<TimelineClipProps> = ({ clip }) => {
       />
 
       {/* Clip Content */}
-      <div className={`timeline-clip-body ${isAudio ? 'timeline-clip-body-audio' : ''}`}>
+      <div
+        className={`timeline-clip-body ${isAudio ? 'timeline-clip-body-audio' : ''} ${
+          isFilmstrip ? 'timeline-clip-body-filmstrip' : ''
+        }`}
+      >
         {clip.mediaType === 'text' ? (
           <TextIcon size={14} />
         ) : isAudio ? (
           <span className="timeline-clip-audio-badge">
             <AudioIcon size={12} />
           </span>
-        ) : clip.thumbnail ? (
-          <img
-            src={clip.thumbnail}
-            alt=""
-            className="timeline-clip-thumb"
-            draggable={false}
-          />
         ) : null}
         <span className="timeline-clip-label">
           {clip.mediaType === 'text' ? clip.text || clip.label : clip.label}

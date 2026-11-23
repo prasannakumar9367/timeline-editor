@@ -77,6 +77,7 @@ export interface EditorState {
   /* Selection */
   selectedClipId: string | null;
   selectedMediaId: string | null;
+  isCropMode: boolean;
 
   /* Snap */
   snapEnabled: boolean;
@@ -107,7 +108,11 @@ export interface EditorState {
   trimClipEnd: (clipId: string, newDuration: number) => void;
   deleteClip: (clipId: string) => void;
   duplicateClip: (clipId: string) => void;
+  splitClip: (clipId: string, splitTime?: number) => void;
+  moveClipTrack: (clipId: string, direction: 'up' | 'down') => void;
   selectClip: (clipId: string | null) => void;
+  toggleCropMode: () => void;
+  setCropMode: (active: boolean) => void;
   updateClip: (
     clipId: string,
     updates: Partial<TimelineClip>,
@@ -173,6 +178,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   pixelsPerSecond: 80,
   selectedClipId: null,
   selectedMediaId: null,
+  isCropMode: false,
   snapEnabled: true,
   isSaving: false,
   lastSavedAt: null,
@@ -536,7 +542,84 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     get().recalcDuration();
   },
 
-  selectClip: (id) => set({ selectedClipId: id }),
+  splitClip: (clipId, splitTime) => {
+    const { clips, currentTime } = get();
+    const clip = clips.find((c) => c.id === clipId);
+    if (!clip) return;
+
+    const cutAt = splitTime !== undefined ? splitTime : currentTime;
+    const minSlice = 0.15;
+    if (cutAt <= clip.startTime + minSlice || cutAt >= clip.startTime + clip.duration - minSlice) {
+      return;
+    }
+
+    const firstDuration = cutAt - clip.startTime;
+    const secondDuration = clip.duration - firstDuration;
+
+    const firstHalf: TimelineClip = {
+      ...clip,
+      duration: firstDuration,
+    };
+    const secondHalf: TimelineClip = {
+      ...clip,
+      id: crypto.randomUUID(),
+      startTime: cutAt,
+      duration: secondDuration,
+      trimStart: clip.trimStart + firstDuration,
+    };
+
+    set((s) => ({
+      past: pushSnapshot(s.past, s),
+      future: [],
+      clips: s.clips.flatMap((c) => (c.id === clipId ? [firstHalf, secondHalf] : [c])),
+      selectedClipId: secondHalf.id,
+    }));
+    get().recalcDuration();
+  },
+
+  moveClipTrack: (clipId, direction) => {
+    const { clips, tracks } = get();
+    const clip = clips.find((c) => c.id === clipId);
+    if (!clip) return;
+
+    const currentIdx = tracks.findIndex((t) => t.id === clip.trackId);
+    if (currentIdx === -1) return;
+
+    const targetIdx = direction === 'up' ? currentIdx - 1 : currentIdx + 1;
+    if (targetIdx < 0 || targetIdx >= tracks.length) return;
+
+    const targetTrack = tracks[targetIdx];
+    if (targetTrack.locked) return;
+
+    set((s) => ({
+      past: pushSnapshot(s.past, s),
+      future: [],
+      clips: s.clips.map((c) => (c.id === clipId ? { ...c, trackId: targetTrack.id } : c)),
+    }));
+  },
+
+  selectClip: (id) =>
+    set((s) => {
+      if (!id) return { selectedClipId: null, isCropMode: false };
+      const clip = s.clips.find((c) => c.id === id);
+      const canCrop = clip?.mediaType === 'video' || clip?.mediaType === 'image';
+      return {
+        selectedClipId: id,
+        isCropMode: canCrop ? s.isCropMode : false,
+      };
+    }),
+
+  toggleCropMode: () =>
+    set((s) => {
+      if (s.isCropMode) return { isCropMode: false };
+      const clip = s.clips.find((c) => c.id === s.selectedClipId);
+      if (!clip || (clip.mediaType !== 'video' && clip.mediaType !== 'image')) {
+        return { isCropMode: false };
+      }
+      return { isCropMode: true, isPlaying: false };
+    }),
+
+  setCropMode: (active) => set({ isCropMode: active }),
 
   updateClip: (clipId, updates, options) => {
     const shouldRecord = options?.recordHistory ?? true;

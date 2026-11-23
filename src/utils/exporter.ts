@@ -77,13 +77,14 @@ function getBestMimeType(preferred: ExportFormat = 'mp4'): {
   return { mimeType: '', extension: 'webm' };
 }
 
-/** Draw an image or video onto a canvas with object-fit: contain. */
+/** Draw an image or video onto a canvas with object-fit: contain and optional crop insets. */
 function drawContain(
   ctx: CanvasRenderingContext2D,
   source: HTMLImageElement | HTMLVideoElement,
   canvasW: number,
   canvasH: number,
-  opacity: number
+  opacity: number,
+  crop?: { top?: number; right?: number; bottom?: number; left?: number }
 ) {
   const srcW =
     source instanceof HTMLVideoElement ? source.videoWidth : source.naturalWidth;
@@ -98,6 +99,17 @@ function drawContain(
   const dy = (canvasH - drawH) / 2;
 
   ctx.save();
+  if (crop) {
+    const t = ((crop.top ?? 0) / 100) * canvasH;
+    const r = ((crop.right ?? 0) / 100) * canvasW;
+    const b = ((crop.bottom ?? 0) / 100) * canvasH;
+    const l = ((crop.left ?? 0) / 100) * canvasW;
+    if (t > 0 || r > 0 || b > 0 || l > 0) {
+      ctx.beginPath();
+      ctx.rect(l, t, Math.max(0, canvasW - l - r), Math.max(0, canvasH - t - b));
+      ctx.clip();
+    }
+  }
   ctx.globalAlpha = Math.max(0, Math.min(1, opacity));
   ctx.drawImage(source, dx, dy, drawW, drawH);
   ctx.restore();
@@ -456,10 +468,17 @@ export async function exportTimelineVideo(
         if (isActive) {
           const mediaTime = Math.max(0, timelineSec - clip.startTime + clip.trimStart);
 
+          const crop = {
+            top: clip.cropTop,
+            right: clip.cropRight,
+            bottom: clip.cropBottom,
+            left: clip.cropLeft,
+          };
+
           if (clip.mediaType === 'text') {
             drawSubtitle(ctx, clip, width, height);
           } else if (item.img) {
-            drawContain(ctx, item.img, width, height, clip.opacity);
+            drawContain(ctx, item.img, width, height, clip.opacity, crop);
           } else if (item.video) {
             if (!item.isPlaying) {
               item.video.currentTime = mediaTime;
@@ -468,7 +487,7 @@ export async function exportTimelineVideo(
             } else if (Math.abs(item.video.currentTime - mediaTime) > 0.3) {
               item.video.currentTime = mediaTime;
             }
-            drawContain(ctx, item.video, width, height, clip.opacity);
+            drawContain(ctx, item.video, width, height, clip.opacity, crop);
           } else if (item.audio) {
             if (!item.isPlaying) {
               item.audio.currentTime = mediaTime;

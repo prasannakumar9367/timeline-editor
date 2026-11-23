@@ -62,7 +62,11 @@ export function useKeyboard() {
           break;
 
         case 'Escape':
-          selectClip(null);
+          if (useEditorStore.getState().isCropMode) {
+            useEditorStore.getState().setCropMode(false);
+          } else {
+            selectClip(null);
+          }
           break;
 
         case 'Home':
