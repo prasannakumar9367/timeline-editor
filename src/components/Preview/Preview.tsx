@@ -1,7 +1,8 @@
 import React, { useMemo, useRef, useEffect, useState } from 'react';
 import './Preview.css';
 import { useEditorStore } from '../../store/editorStore';
-import { formatTime } from '../../utils/time';
+import { formatPreciseTime } from '../../utils/time';
+import { PlayIcon, PauseIcon, CloseIcon, DownloadIcon, CropIcon } from '../Icons/Icons';
 import type { TimelineClip, MediaItem } from '../../types/editor';
 
 export function getTextCoords(clip: TimelineClip): { x: number; y: number } {
@@ -23,13 +24,19 @@ export default function Preview() {
   const selectedClipId = useEditorStore((s) => s.selectedClipId);
   const selectedMediaId = useEditorStore((s) => s.selectedMediaId);
   const isCropMode = useEditorStore((s) => s.isCropMode);
+  const isFullPreview = useEditorStore((s) => s.isFullPreview);
+  const duration = useEditorStore((s) => s.duration);
   const togglePlay = useEditorStore((s) => s.togglePlay);
+  const setCurrentTime = useEditorStore((s) => s.setCurrentTime);
   const addClip = useEditorStore((s) => s.addClip);
   const selectClip = useEditorStore((s) => s.selectClip);
   const updateClip = useEditorStore((s) => s.updateClip);
   const recordHistory = useEditorStore((s) => s.recordHistory);
   const setCropMode = useEditorStore((s) => s.setCropMode);
+  const setFullPreview = useEditorStore((s) => s.setFullPreview);
+  const openExportModal = useEditorStore((s) => s.openExportModal);
 
+  const containerRef = useRef<HTMLDivElement>(null);
   const screenRef = useRef<HTMLDivElement>(null);
 
   // Synchronous Map of media items - no useRef render-lag!
@@ -99,27 +106,59 @@ export default function Preview() {
     return null;
   }, [visualClips, selectedMediaId, mediaMap, mediaItems]);
 
-  const topClip = visualClips.length > 0 ? visualClips[visualClips.length - 1] : null;
   const selectedActiveClip = useMemo(
-    () => visualClips.find((c) => c.id === selectedClipId) ?? null,
-    [visualClips, selectedClipId]
+    () => (isFullPreview ? null : visualClips.find((c) => c.id === selectedClipId) ?? null),
+    [visualClips, selectedClipId, isFullPreview]
   );
   const activeCropClip =
+    !isFullPreview &&
     isCropMode &&
     selectedActiveClip &&
     (selectedActiveClip.mediaType === 'video' || selectedActiveClip.mediaType === 'image')
       ? selectedActiveClip
       : null;
 
+  const contentEnd = useMemo(() => {
+    const unmuted = clips.filter((c) => !trackMutedMap.get(c.trackId));
+    if (unmuted.length === 0) return duration;
+    return Math.max(...unmuted.map((c) => c.startTime + c.duration));
+  }, [clips, trackMutedMap, duration]);
+
+  const handleExitFullPreview = () => {
+    if (document.fullscreenElement) {
+      void document.exitFullscreen().catch(() => {});
+    }
+    setFullPreview(false);
+  };
+
+  const handleToggleBrowserFullscreen = () => {
+    if (document.fullscreenElement) {
+      void document.exitFullscreen().catch(() => {});
+    } else if (containerRef.current?.requestFullscreen) {
+      void containerRef.current.requestFullscreen().catch(() => {});
+    }
+  };
+
   return (
-    <div className="preview-container">
+    <div
+      ref={containerRef}
+      className={`preview-container ${isFullPreview ? 'preview-container--fullscreen' : ''}`}
+    >
       <div
         ref={screenRef}
-        className={`preview-screen ${selectedActiveClip ? 'preview-screen--has-selection' : ''}`}
+        className={`preview-screen ${selectedActiveClip ? 'preview-screen--has-selection' : ''} ${
+          isFullPreview ? 'preview-screen--fullscreen' : ''
+        }`}
         onClick={() => {
-          if (!activeCropClip) togglePlay();
+          if (!activeCropClip && clips.length > 0) togglePlay();
         }}
-        title={activeCropClip ? 'Drag crop handles to crop' : 'Click to Play / Pause (Space)'}
+        title={
+          clips.length === 0
+            ? 'Import media to begin'
+            : activeCropClip
+            ? 'Drag crop handles to crop'
+            : 'Click to Play / Pause (Space)'
+        }
       >
         {/* Case 1: Active timeline visual clips */}
         {visualClips.length > 0 ? (
@@ -151,8 +190,13 @@ export default function Preview() {
                 currentTime={currentTime}
                 isPlaying={isPlaying}
                 zIndex={index + 1}
-                isSelected={isSelected}
+                isSelected={isSelected && !isFullPreview}
                 isCropping={activeCropClip?.id === clip.id}
+                screenRef={screenRef}
+                onTransformStart={recordHistory}
+                onTransformChange={(updates) =>
+                  updateClip(clip.id, updates, { recordHistory: false })
+                }
               />
             );
           })
@@ -222,27 +266,45 @@ export default function Preview() {
           );
         })}
 
-        {/* Active Clip Name Badge */}
-        {topClip && (
-          <div className="preview-clip-name-badge">
-            <span
-              className="preview-clip-color-indicator"
-              style={{ backgroundColor: topClip.color }}
-            />
-            <span className="preview-clip-name-label">{topClip.label}</span>
-          </div>
-        )}
-
-        {/* Selected Clip Highlight Badge */}
-        {selectedActiveClip && !activeCropClip && (
-          <div className="preview-selected-badge">
-            <span className="preview-selected-dot" />
-            <span className="preview-selected-label">
-              Selected: {selectedActiveClip.label}
-              {selectedActiveClip.mediaType === 'text' ? ' · Drag to move' : ''}
-            </span>
-          </div>
-        )}
+        {/* Selected Clip Quick Transform / Crop Bar */}
+        {selectedActiveClip &&
+          !activeCropClip &&
+          !isFullPreview &&
+          (selectedActiveClip.mediaType === 'video' ||
+            selectedActiveClip.mediaType === 'image') && (
+            <div
+              className="preview-transform-bar"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <span className="preview-transform-size">
+                {Math.round((selectedActiveClip.scale ?? 1) * 100)}%
+              </span>
+              {((selectedActiveClip.scale ?? 1) !== 1 ||
+                (selectedActiveClip.posX ?? 0) !== 0 ||
+                (selectedActiveClip.posY ?? 0) !== 0) && (
+                <button
+                  type="button"
+                  className="preview-crop-bar-btn"
+                  onClick={() =>
+                    updateClip(selectedActiveClip.id, { scale: 1, posX: 0, posY: 0 })
+                  }
+                  title="Reset size and position"
+                >
+                  Fit
+                </button>
+              )}
+              <button
+                type="button"
+                className="preview-crop-bar-btn preview-crop-bar-btn-primary"
+                onClick={() => setCropMode(true)}
+                title="Crop selected clip"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+              >
+                <CropIcon size={12} />
+                <span>Crop</span>
+              </button>
+            </div>
+          )}
 
         {/* Interactive Crop Overlay */}
         {activeCropClip && (
@@ -265,16 +327,86 @@ export default function Preview() {
           />
         )}
 
-        {/* Timecode Badge */}
-        <div className="preview-timecode-badge">
-          <span
-            className={`preview-status-indicator ${
-              isPlaying ? 'preview-status-playing' : ''
-            }`}
-          />
-          <span className="preview-timecode-value">{formatTime(currentTime)}</span>
-        </div>
+        {/* Timecode Badge (hidden in fullscreen where full transport bar is shown)
+        {!isFullPreview && (
+          <div className="preview-timecode-badge">
+            <span
+              className={`preview-status-indicator ${
+                isPlaying ? 'preview-status-playing' : ''
+              }`}
+            />
+           
+          </div>
+        )} */}
       </div>
+
+      {/* Fullscreen Cinema Transport Bar */}
+      {isFullPreview && (
+        <div
+          className="preview-fullscreen-bar"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            type="button"
+            className="preview-fs-play-btn"
+            onClick={togglePlay}
+            title={isPlaying ? 'Pause (Space)' : 'Play (Space)'}
+            aria-label={isPlaying ? 'Pause' : 'Play'}
+          >
+            {isPlaying ? <PauseIcon size={15} /> : <PlayIcon size={15} />}
+          </button>
+
+          <span className="preview-fs-time">
+            <strong>{formatPreciseTime(currentTime)}</strong>
+            <span className="preview-fs-sep">/</span>
+            <span>{formatPreciseTime(contentEnd)}</span>
+          </span>
+
+          <input
+            type="range"
+            className="preview-fs-scrubber"
+            min={0}
+            max={Math.max(0.1, contentEnd)}
+            step={0.05}
+            value={Math.min(currentTime, contentEnd)}
+            onChange={(e) => setCurrentTime(Number(e.target.value))}
+            aria-label="Preview playback position"
+          />
+
+          <button
+            type="button"
+            className="preview-fs-btn"
+            onClick={handleToggleBrowserFullscreen}
+            title="Toggle Browser Fullscreen"
+          >
+            ⛶ Fullscreen
+          </button>
+
+          <button
+            type="button"
+            className="preview-fs-btn preview-fs-btn-primary"
+            onClick={() => {
+              if (document.fullscreenElement) {
+                void document.exitFullscreen().catch(() => {});
+              }
+              openExportModal();
+            }}
+          >
+            <DownloadIcon size={14} />
+            <span>Export</span>
+          </button>
+
+          <button
+            type="button"
+            className="preview-fs-btn"
+            onClick={handleExitFullPreview}
+            title="Exit Fullscreen Preview (Esc)"
+          >
+            <CloseIcon size={13} />
+            <span>Exit</span>
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -404,6 +536,9 @@ interface VisualProps {
   zIndex: number;
   isSelected: boolean;
   isCropping: boolean;
+  screenRef: React.RefObject<HTMLDivElement | null>;
+  onTransformStart: () => void;
+  onTransformChange: (updates: Partial<TimelineClip>) => void;
 }
 
 function VisualClipRenderer({
@@ -414,8 +549,12 @@ function VisualClipRenderer({
   zIndex,
   isSelected,
   isCropping,
+  screenRef,
+  onTransformStart,
+  onTransformChange,
 }: VisualProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const [dragLabel, setDragLabel] = useState<string | null>(null);
 
   const targetMediaTime = Math.max(
     0,
@@ -433,6 +572,12 @@ function VisualClipRenderer({
   useEffect(() => {
     if (clip.mediaType !== 'video' || !videoRef.current) return;
     const v = videoRef.current;
+    v.volume = Math.max(0, Math.min(1, clip.volume));
+  }, [clip.volume, clip.mediaType]);
+
+  useEffect(() => {
+    if (clip.mediaType !== 'video' || !videoRef.current) return;
+    const v = videoRef.current;
     if (isPlaying) {
       v.play().catch(() => {});
     } else {
@@ -445,28 +590,193 @@ function VisualClipRenderer({
   const cropBottom = clip.cropBottom ?? 0;
   const cropLeft = clip.cropLeft ?? 0;
   const hasCrop = cropTop > 0 || cropRight > 0 || cropBottom > 0 || cropLeft > 0;
+
+  // Compute live incoming transition style (fade, slide, zoom, wipe)
+  let transitionOpacity = 1;
+  let transitionTransform: string | undefined;
+  let wipeRightPct = 0;
+
+  if (clip.transitionIn && clip.transitionIn.duration > 0) {
+    const elapsedInClip = currentTime - clip.startTime;
+    const dur = Math.min(clip.transitionIn.duration, clip.duration);
+    if (elapsedInClip >= 0 && elapsedInClip < dur) {
+      const rawP = Math.max(0, Math.min(1, elapsedInClip / dur));
+      // Smooth ease-out curve
+      const p = 1 - Math.pow(1 - rawP, 2);
+      switch (clip.transitionIn.type) {
+        case 'fade':
+          transitionOpacity = p;
+          break;
+        case 'slide-left':
+          transitionTransform = `translateX(${(1 - p) * 100}%)`;
+          break;
+        case 'slide-right':
+          transitionTransform = `translateX(${-(1 - p) * 100}%)`;
+          break;
+        case 'zoom':
+          transitionTransform = `scale(${0.75 + p * 0.25})`;
+          transitionOpacity = p;
+          break;
+        case 'wipe':
+          wipeRightPct = (1 - p) * 100;
+          break;
+      }
+    }
+  }
+
+  const effectiveRight = Math.max(cropRight, wipeRightPct);
   const clipPathValue =
-    !isCropping && hasCrop
-      ? `inset(${cropTop}% ${cropRight}% ${cropBottom}% ${cropLeft}%)`
+    !isCropping && (hasCrop || wipeRightPct > 0)
+      ? `inset(${cropTop}% ${effectiveRight}% ${cropBottom}% ${cropLeft}%)`
       : undefined;
+
+  const scale = clip.scale ?? 1;
+  const posX = clip.posX ?? 0;
+  const posY = clip.posY ?? 0;
+
+  const transformParts: string[] = [];
+  if (posX !== 0 || posY !== 0) {
+    transformParts.push(`translate(${posX}%, ${posY}%)`);
+  }
+  if (scale !== 1) {
+    transformParts.push(`scale(${scale})`);
+  }
+  if (transitionTransform) {
+    transformParts.push(transitionTransform);
+  }
+  const combinedTransform = transformParts.length > 0 ? transformParts.join(' ') : undefined;
+
+  const mediaStyle: React.CSSProperties = {
+    opacity: clip.opacity * transitionOpacity,
+    zIndex,
+    clipPath: clipPathValue,
+    transform: combinedTransform,
+  };
+
+  // Drag corner handle to resize clip smoothly
+  const handleResizePointerDown =
+    (corner: 'nw' | 'ne' | 'sw' | 'se') => (e: React.PointerEvent) => {
+      if (e.button !== 0) return;
+      e.stopPropagation();
+
+      const screenEl = screenRef.current;
+      if (!screenEl) return;
+      const rect = screenEl.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return;
+
+      const startX = e.clientX;
+      const startY = e.clientY;
+      const initialScale = scale;
+      const signX = corner.includes('e') ? 1 : -1;
+      const signY = corner.includes('s') ? 1 : -1;
+      let recorded = false;
+
+      const onPointerMove = (ev: PointerEvent) => {
+        const dx = (ev.clientX - startX) * signX;
+        const dy = (ev.clientY - startY) * signY;
+        if (!recorded && (Math.abs(ev.clientX - startX) > 1 || Math.abs(ev.clientY - startY) > 1)) {
+          onTransformStart();
+          recorded = true;
+        }
+        if (!recorded) return;
+
+        // Average diagonal drag relative to preview size
+        const deltaRatio = (dx / rect.width + dy / rect.height) * 1.15;
+        const nextScale = Math.max(0.15, Math.min(3, initialScale + deltaRatio));
+        const rounded = Math.round(nextScale * 100) / 100;
+        setDragLabel(`${Math.round(rounded * 100)}%`);
+        onTransformChange({ scale: rounded });
+      };
+
+      const onPointerUp = () => {
+        setDragLabel(null);
+        window.removeEventListener('pointermove', onPointerMove);
+        window.removeEventListener('pointerup', onPointerUp);
+      };
+
+      window.addEventListener('pointermove', onPointerMove);
+      window.addEventListener('pointerup', onPointerUp);
+    };
+
+  // Drag inside selected frame to move clip position
+  const handleMovePointerDown = (e: React.PointerEvent) => {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+
+    const screenEl = screenRef.current;
+    if (!screenEl) return;
+    const rect = screenEl.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
+
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const initialX = posX;
+    const initialY = posY;
+    let recorded = false;
+
+    const onPointerMove = (ev: PointerEvent) => {
+      const dx = ev.clientX - startX;
+      const dy = ev.clientY - startY;
+      if (!recorded && (Math.abs(dx) > 2 || Math.abs(dy) > 2)) {
+        onTransformStart();
+        recorded = true;
+      }
+      if (!recorded) return;
+
+      const nextX = Math.max(-90, Math.min(90, initialX + (dx / rect.width) * 100));
+      const nextY = Math.max(-90, Math.min(90, initialY + (dy / rect.height) * 100));
+      const rx = Math.round(nextX * 10) / 10;
+      const ry = Math.round(nextY * 10) / 10;
+      setDragLabel(`X:${Math.round(rx)}% Y:${Math.round(ry)}%`);
+      onTransformChange({ posX: rx, posY: ry });
+    };
+
+    const onPointerUp = () => {
+      setDragLabel(null);
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+    };
+
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
+  };
 
   const highlightOverlay =
     isSelected && !isCropping ? (
       <div
-        className="preview-clip-highlight"
+        className="preview-clip-highlight preview-clip-highlight--interactive"
         style={{
           zIndex: zIndex + 15,
           top: hasCrop ? `${cropTop}%` : '4px',
           right: hasCrop ? `${cropRight}%` : '4px',
           bottom: hasCrop ? `${cropBottom}%` : '4px',
           left: hasCrop ? `${cropLeft}%` : '4px',
+          transform:
+            posX !== 0 || posY !== 0 || scale !== 1
+              ? `translate(${posX}%, ${posY}%) scale(${scale})`
+              : undefined,
         }}
-        aria-hidden="true"
+        onPointerDown={handleMovePointerDown}
+        onClick={(e) => e.stopPropagation()}
+        title="Drag to move · Drag corners to resize"
       >
-        <span className="preview-corner preview-corner-tl" />
-        <span className="preview-corner preview-corner-tr" />
-        <span className="preview-corner preview-corner-bl" />
-        <span className="preview-corner preview-corner-br" />
+        {dragLabel && <div className="preview-drag-pill">{dragLabel}</div>}
+        <span
+          className="preview-corner preview-corner-tl preview-corner-resize"
+          onPointerDown={handleResizePointerDown('nw')}
+        />
+        <span
+          className="preview-corner preview-corner-tr preview-corner-resize"
+          onPointerDown={handleResizePointerDown('ne')}
+        />
+        <span
+          className="preview-corner preview-corner-bl preview-corner-resize"
+          onPointerDown={handleResizePointerDown('sw')}
+        />
+        <span
+          className="preview-corner preview-corner-br preview-corner-resize"
+          onPointerDown={handleResizePointerDown('se')}
+        />
       </div>
     ) : null;
 
@@ -477,7 +787,7 @@ function VisualClipRenderer({
           src={media.url}
           alt={clip.label}
           className="preview-media preview-image"
-          style={{ opacity: clip.opacity, zIndex, clipPath: clipPathValue }}
+          style={mediaStyle}
         />
         {highlightOverlay}
       </>
@@ -490,13 +800,20 @@ function VisualClipRenderer({
         ref={videoRef}
         src={media.url}
         className="preview-media preview-video"
-        style={{ opacity: clip.opacity, zIndex, clipPath: clipPathValue }}
+        style={mediaStyle}
+        preload="auto"
         playsInline
         muted={false}
         onLoadedMetadata={() => {
           if (videoRef.current) {
             videoRef.current.currentTime = targetMediaTime;
-            videoRef.current.volume = clip.volume;
+            videoRef.current.volume = Math.max(0, Math.min(1, clip.volume));
+            if (isPlaying) videoRef.current.play().catch(() => {});
+          }
+        }}
+        onCanPlay={() => {
+          if (videoRef.current && isPlaying && videoRef.current.paused) {
+            videoRef.current.play().catch(() => {});
           }
         }}
       />
@@ -619,11 +936,37 @@ function CropOverlay({
         <div className="preview-crop-corner preview-crop-corner-se" onPointerDown={startHandleDrag('se')} />
       </div>
 
-      {/* Floating Crop Mode Toolbar */}
+      {/* Floating Crop Mode Toolbar with Aspect Presets */}
       <div className="preview-crop-bar">
         <span className="preview-crop-bar-label">
-          Crop ({Math.round(100 - left - right)}% × {Math.round(100 - top - bottom)}%)
+          {Math.round(100 - left - right)}% × {Math.round(100 - top - bottom)}%
         </span>
+        {(
+          [
+            { label: '16:9', top: 0, right: 0, bottom: 0, left: 0 },
+            { label: '4:3', top: 0, right: 12.5, bottom: 0, left: 12.5 },
+            { label: '1:1', top: 0, right: 21.9, bottom: 0, left: 21.9 },
+            { label: '9:16', top: 0, right: 34.2, bottom: 0, left: 34.2 },
+          ] as const
+        ).map((preset) => (
+          <button
+            key={preset.label}
+            type="button"
+            className="preview-crop-bar-btn"
+            onClick={() => {
+              onCropStart();
+              onCropChange({
+                cropTop: preset.top,
+                cropRight: preset.right,
+                cropBottom: preset.bottom,
+                cropLeft: preset.left,
+              });
+            }}
+            title={`Crop to ${preset.label}`}
+          >
+            {preset.label}
+          </button>
+        ))}
         <button type="button" className="preview-crop-bar-btn" onClick={onReset}>
           Reset
         </button>
@@ -650,38 +993,84 @@ function AudioClipRenderer({
   isPlaying,
 }: AudioProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
+  const spokeRef = useRef(false);
   const targetMediaTime = Math.max(
     0,
     currentTime - clip.startTime + clip.trimStart
   );
 
+  // Text-to-Speech live playback via Web Speech API
   useEffect(() => {
-    if (!audioRef.current) return;
+    if (!clip.ttsText || typeof window === 'undefined' || !('speechSynthesis' in window)) {
+      return;
+    }
+
+    if (isPlaying && !spokeRef.current) {
+      spokeRef.current = true;
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(clip.ttsText);
+      const voices = window.speechSynthesis.getVoices();
+      const match = voices.find((v) => v.name === clip.ttsVoice);
+      if (match) utterance.voice = match;
+      utterance.rate = clip.ttsRate ?? 1;
+      utterance.pitch = clip.ttsPitch ?? 1;
+      utterance.volume = Math.max(0, Math.min(1, clip.volume));
+      window.speechSynthesis.speak(utterance);
+    } else if (!isPlaying && spokeRef.current) {
+      spokeRef.current = false;
+      window.speechSynthesis.cancel();
+    }
+  }, [isPlaying, clip.ttsText, clip.ttsVoice, clip.ttsRate, clip.ttsPitch, clip.volume]);
+
+  useEffect(() => {
+    return () => {
+      if (clip.ttsText && typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, [clip.ttsText]);
+
+  useEffect(() => {
+    if (clip.ttsText || !audioRef.current) return;
+    audioRef.current.volume = Math.max(0, Math.min(1, clip.volume));
+  }, [clip.volume, clip.ttsText]);
+
+  useEffect(() => {
+    if (clip.ttsText || !audioRef.current) return;
     const a = audioRef.current;
     if (Math.abs(a.currentTime - targetMediaTime) > 0.25) {
       a.currentTime = targetMediaTime;
     }
-  }, [targetMediaTime]);
+  }, [targetMediaTime, clip.ttsText]);
 
   useEffect(() => {
-    if (!audioRef.current) return;
+    if (clip.ttsText || !audioRef.current) return;
     const a = audioRef.current;
     if (isPlaying) {
       a.play().catch(() => {});
     } else {
       a.pause();
     }
-  }, [isPlaying]);
+  }, [isPlaying, clip.ttsText]);
+
+  if (clip.ttsText) return null;
 
   return (
     <audio
       ref={audioRef}
       src={media.url}
+      preload="auto"
       style={{ display: 'none' }}
       onLoadedMetadata={() => {
         if (audioRef.current) {
           audioRef.current.currentTime = targetMediaTime;
-          audioRef.current.volume = clip.volume;
+          audioRef.current.volume = Math.max(0, Math.min(1, clip.volume));
+          if (isPlaying) audioRef.current.play().catch(() => {});
+        }
+      }}
+      onCanPlay={() => {
+        if (audioRef.current && isPlaying && audioRef.current.paused) {
+          audioRef.current.play().catch(() => {});
         }
       }}
     />

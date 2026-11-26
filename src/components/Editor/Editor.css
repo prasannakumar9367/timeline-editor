@@ -90,9 +90,9 @@
   grid-area: timeline;
   grid-row: 3;
   grid-column: 1 / -1;
-  height: 280px;
+  height: 310px;
   min-height: 280px;
-  max-height: 280px;
+  max-height: 310px;
   background-color: #242424;
   border-top: 1px solid #3a3a3a;
   overflow: hidden;

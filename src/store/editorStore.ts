@@ -86,6 +86,9 @@ export interface EditorState {
   isSaving: boolean;
   lastSavedAt: number | null;
   isExportModalOpen: boolean;
+  isTtsModalOpen: boolean;
+  isRecordModalOpen: boolean;
+  isFullPreview: boolean;
 
   /* ── Actions ── */
   recordHistory: () => void;
@@ -97,7 +100,22 @@ export interface EditorState {
   resetProject: () => Promise<void>;
   openExportModal: () => void;
   closeExportModal: () => void;
+  openTtsModal: () => void;
+  closeTtsModal: () => void;
+  openRecordModal: () => void;
+  closeRecordModal: () => void;
+  setFullPreview: (open: boolean) => void;
   addMedia: (files: FileList | File[]) => Promise<void>;
+  addMediaAndPlaceClip: (file: File, durationOverride?: number) => Promise<void>;
+  addTtsClip: (options: {
+    text: string;
+    voice: string;
+    rate: number;
+    pitch: number;
+    duration: number;
+    waveform: number[];
+    file: File;
+  }) => void;
   removeMedia: (id: string) => void;
   selectMedia: (id: string | null) => void;
 
@@ -183,6 +201,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   isSaving: false,
   lastSavedAt: null,
   isExportModalOpen: false,
+  isTtsModalOpen: false,
+  isRecordModalOpen: false,
+  isFullPreview: false,
 
   /* ── History (Undo / Redo) ── */
   recordHistory: () =>
@@ -301,8 +322,19 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     });
   },
 
-  openExportModal: () => set({ isExportModalOpen: true, isPlaying: false }),
+  openExportModal: () => set({ isExportModalOpen: true, isPlaying: false, isFullPreview: false }),
   closeExportModal: () => set({ isExportModalOpen: false }),
+  openTtsModal: () => set({ isTtsModalOpen: true, isPlaying: false }),
+  closeTtsModal: () => set({ isTtsModalOpen: false }),
+  openRecordModal: () => set({ isRecordModalOpen: true, isPlaying: false }),
+  closeRecordModal: () => set({ isRecordModalOpen: false }),
+  setFullPreview: (open) =>
+    set((s) => ({
+      isFullPreview: open,
+      isCropMode: open ? false : s.isCropMode,
+      selectedClipId: open ? null : s.selectedClipId,
+      isPlaying: open ? s.isPlaying : false,
+    })),
 
   /* ── Media library ── */
   addMedia: async (files) => {
@@ -376,6 +408,113 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       isUploading: false,
     }));
 
+    get().recalcDuration();
+  },
+
+  addMediaAndPlaceClip: async (file, durationOverride) => {
+    set({ isUploading: true });
+    try {
+      const type = getMediaType(file);
+      const url = URL.createObjectURL(file);
+      const [thumbnail, rawDuration, waveform] = await Promise.all([
+        generateThumbnail(file, type),
+        getMediaDuration(file, type),
+        type === 'audio' ? extractAudioWaveform(file) : Promise.resolve(undefined),
+      ]);
+
+      const duration =
+        durationOverride && durationOverride > 0.2
+          ? durationOverride
+          : rawDuration;
+
+      const mediaItem: MediaItem = {
+        id: crypto.randomUUID(),
+        name: file.name,
+        type,
+        file,
+        url,
+        duration,
+        thumbnail,
+        ...(waveform && waveform.length > 0 ? { waveform } : {}),
+      };
+
+      const { tracks, currentTime } = get();
+      const targetTrackId = getTrackForType(type, tracks);
+      const clip: TimelineClip = {
+        id: crypto.randomUUID(),
+        trackId: targetTrackId,
+        mediaId: mediaItem.id,
+        mediaType: type,
+        startTime: Math.max(0, currentTime),
+        duration: type === 'image' ? 5 : duration,
+        trimStart: 0,
+        volume: 1,
+        opacity: 1,
+        label: file.name.replace(/\.[^.]+$/, ''),
+        color: nextColor(),
+        thumbnail,
+      };
+
+      set((s) => ({
+        past: pushSnapshot(s.past, s),
+        future: [],
+        mediaItems: [...s.mediaItems, mediaItem],
+        clips: [...s.clips, clip],
+        selectedClipId: clip.id,
+        selectedMediaId: mediaItem.id,
+        isUploading: false,
+      }));
+      get().recalcDuration();
+    } catch (err) {
+      console.warn('Failed to add recorded media:', err);
+      set({ isUploading: false });
+    }
+  },
+
+  addTtsClip: ({ text, voice, rate, pitch, duration, waveform, file }) => {
+    const { tracks, currentTime } = get();
+    const targetTrackId = getTrackForType('audio', tracks);
+    if (!targetTrackId) return;
+
+    const url = URL.createObjectURL(file);
+    const mediaItem: MediaItem = {
+      id: crypto.randomUUID(),
+      name: file.name,
+      type: 'audio',
+      file,
+      url,
+      duration,
+      thumbnail: '',
+      waveform,
+    };
+
+    const clip: TimelineClip = {
+      id: crypto.randomUUID(),
+      trackId: targetTrackId,
+      mediaId: mediaItem.id,
+      mediaType: 'audio',
+      startTime: Math.max(0, currentTime),
+      duration: Math.max(0.5, duration),
+      trimStart: 0,
+      volume: 1,
+      opacity: 1,
+      label: `TTS: ${text.trim().slice(0, 22) || 'Speech'}`,
+      color: '#06b6d4',
+      thumbnail: '',
+      ttsText: text.trim(),
+      ttsVoice: voice,
+      ttsRate: rate,
+      ttsPitch: pitch,
+    };
+
+    set((s) => ({
+      past: pushSnapshot(s.past, s),
+      future: [],
+      mediaItems: [...s.mediaItems, mediaItem],
+      clips: [...s.clips, clip],
+      selectedClipId: clip.id,
+      selectedMediaId: mediaItem.id,
+    }));
     get().recalcDuration();
   },
 
@@ -515,12 +654,16 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   },
 
   deleteClip: (clipId) => {
-    set((s) => ({
-      past: pushSnapshot(s.past, s),
-      future: [],
-      clips: s.clips.filter((c) => c.id !== clipId),
-      selectedClipId: s.selectedClipId === clipId ? null : s.selectedClipId,
-    }));
+    set((s) => {
+      const nextClips = s.clips.filter((c) => c.id !== clipId);
+      return {
+        past: pushSnapshot(s.past, s),
+        future: [],
+        clips: nextClips,
+        selectedClipId: s.selectedClipId === clipId ? null : s.selectedClipId,
+        isPlaying: nextClips.length === 0 ? false : s.isPlaying,
+      };
+    });
     get().recalcDuration();
   },
 
@@ -634,9 +777,28 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   /* ── Playback ── */
   setCurrentTime: (t) => set({ currentTime: Math.max(0, t) }),
-  play: () => set({ isPlaying: true }),
+  play: () => {
+    const { currentTime, clips, tracks } = get();
+    if (clips.length === 0) return;
+    const mutedTrackIds = new Set(tracks.filter((t) => t.muted).map((t) => t.id));
+    const activeClips = clips.filter((c) => !mutedTrackIds.has(c.trackId));
+    if (activeClips.length === 0) return;
+    const contentEnd = Math.max(...activeClips.map((c) => c.startTime + c.duration));
+    // If playhead is already at the end of the timeline, restart from 0
+    if (contentEnd > 0 && currentTime >= contentEnd - 0.02) {
+      set({ currentTime: 0, isPlaying: true });
+    } else {
+      set({ isPlaying: true });
+    }
+  },
   pause: () => set({ isPlaying: false }),
-  togglePlay: () => set((s) => ({ isPlaying: !s.isPlaying })),
+  togglePlay: () => {
+    if (get().isPlaying) {
+      get().pause();
+    } else {
+      get().play();
+    }
+  },
   stop: () => set({ isPlaying: false, currentTime: 0 }),
 
   /* ── View ── */

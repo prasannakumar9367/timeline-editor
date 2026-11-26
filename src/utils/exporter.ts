@@ -1,6 +1,7 @@
 import type { MediaItem, TimelineClip, Track } from '../types/editor';
 
 export type ExportFormat = 'mp4' | 'webm';
+export type ExportStatus = 'preparing' | 'rendering' | 'finalizing';
 
 export interface ExportOptions {
   width: number;
@@ -11,6 +12,7 @@ export interface ExportOptions {
   startTime?: number;
   endTime?: number;
   onProgress?: (percent: number, currentTime: number, totalDuration: number) => void;
+  onStatus?: (status: ExportStatus) => void;
   signal?: AbortSignal;
 }
 
@@ -77,14 +79,16 @@ function getBestMimeType(preferred: ExportFormat = 'mp4'): {
   return { mimeType: '', extension: 'webm' };
 }
 
-/** Draw an image or video onto a canvas with object-fit: contain and optional crop insets. */
+/** Draw an image or video onto a canvas with object-fit: contain, optional crop, transform, and transition. */
 function drawContain(
   ctx: CanvasRenderingContext2D,
   source: HTMLImageElement | HTMLVideoElement,
   canvasW: number,
   canvasH: number,
   opacity: number,
-  crop?: { top?: number; right?: number; bottom?: number; left?: number }
+  crop?: { top?: number; right?: number; bottom?: number; left?: number },
+  transition?: { type: string; progress: number },
+  transform?: { scale?: number; posX?: number; posY?: number }
 ) {
   const srcW =
     source instanceof HTMLVideoElement ? source.videoWidth : source.naturalWidth;
@@ -92,25 +96,56 @@ function drawContain(
     source instanceof HTMLVideoElement ? source.videoHeight : source.naturalHeight;
   if (!srcW || !srcH) return;
 
-  const scale = Math.min(canvasW / srcW, canvasH / srcH);
-  const drawW = srcW * scale;
-  const drawH = srcH * scale;
-  const dx = (canvasW - drawW) / 2;
-  const dy = (canvasH - drawH) / 2;
+  const userScale = transform?.scale ?? 1;
+  const userOffsetX = ((transform?.posX ?? 0) / 100) * canvasW;
+  const userOffsetY = ((transform?.posY ?? 0) / 100) * canvasH;
 
-  ctx.save();
-  if (crop) {
-    const t = ((crop.top ?? 0) / 100) * canvasH;
-    const r = ((crop.right ?? 0) / 100) * canvasW;
-    const b = ((crop.bottom ?? 0) / 100) * canvasH;
-    const l = ((crop.left ?? 0) / 100) * canvasW;
-    if (t > 0 || r > 0 || b > 0 || l > 0) {
-      ctx.beginPath();
-      ctx.rect(l, t, Math.max(0, canvasW - l - r), Math.max(0, canvasH - t - b));
-      ctx.clip();
+  const scale = Math.min(canvasW / srcW, canvasH / srcH) * userScale;
+  let drawW = srcW * scale;
+  let drawH = srcH * scale;
+  let dx = (canvasW - drawW) / 2 + userOffsetX;
+  let dy = (canvasH - drawH) / 2 + userOffsetY;
+  let alpha = Math.max(0, Math.min(1, opacity));
+  let wipeRightPct = 0;
+
+  if (transition && transition.progress < 1) {
+    const p = 1 - Math.pow(1 - Math.max(0, Math.min(1, transition.progress)), 2);
+    switch (transition.type) {
+      case 'fade':
+        alpha *= p;
+        break;
+      case 'slide-left':
+        dx += (1 - p) * canvasW;
+        break;
+      case 'slide-right':
+        dx -= (1 - p) * canvasW;
+        break;
+      case 'zoom': {
+        const z = 0.75 + p * 0.25;
+        drawW *= z;
+        drawH *= z;
+        dx = (canvasW - drawW) / 2 + userOffsetX;
+        dy = (canvasH - drawH) / 2 + userOffsetY;
+        alpha *= p;
+        break;
+      }
+      case 'wipe':
+        wipeRightPct = (1 - p) * 100;
+        break;
     }
   }
-  ctx.globalAlpha = Math.max(0, Math.min(1, opacity));
+
+  ctx.save();
+  const t = ((crop?.top ?? 0) / 100) * canvasH;
+  const r = (Math.max(crop?.right ?? 0, wipeRightPct) / 100) * canvasW;
+  const b = ((crop?.bottom ?? 0) / 100) * canvasH;
+  const l = ((crop?.left ?? 0) / 100) * canvasW;
+  if (t > 0 || r > 0 || b > 0 || l > 0) {
+    ctx.beginPath();
+    ctx.rect(l, t, Math.max(0, canvasW - l - r), Math.max(0, canvasH - t - b));
+    ctx.clip();
+  }
+  ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
   ctx.drawImage(source, dx, dy, drawW, drawH);
   ctx.restore();
 }
@@ -207,31 +242,80 @@ function drawSubtitle(
   ctx.restore();
 }
 
-function loadImage(url: string): Promise<HTMLImageElement> {
+function loadImage(url: string, signal?: AbortSignal): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new Error('Export cancelled.'));
+      return;
+    }
     const img = new Image();
     img.crossOrigin = 'anonymous';
-    img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error('Failed to load image for export'));
+    const onAbort = () => reject(new Error('Export cancelled.'));
+    signal?.addEventListener('abort', onAbort, { once: true });
+    img.onload = () => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve(img);
+    };
+    img.onerror = () => {
+      signal?.removeEventListener('abort', onAbort);
+      reject(new Error('Failed to load image for export'));
+    };
     img.src = url;
   });
 }
 
 function loadMediaElement<T extends HTMLVideoElement | HTMLAudioElement>(
   tag: 'video' | 'audio',
-  url: string
+  url: string,
+  signal?: AbortSignal
 ): Promise<T> {
   return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new Error('Export cancelled.'));
+      return;
+    }
     const el = document.createElement(tag) as T;
     el.crossOrigin = 'anonymous';
     el.preload = 'auto';
     if (el instanceof HTMLVideoElement) {
       el.playsInline = true;
     }
-    el.onloadeddata = () => resolve(el);
-    el.onerror = () => reject(new Error(`Failed to load ${tag} for export`));
+
+    let settled = false;
+    const finish = (err?: Error) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
+      el.removeEventListener('loadeddata', onReady);
+      el.removeEventListener('canplay', onReady);
+      el.removeEventListener('loadedmetadata', onMeta);
+      el.removeEventListener('error', onError);
+      if (err) reject(err);
+      else resolve(el);
+    };
+
+    const onReady = () => finish();
+    const onMeta = () => {
+      if (tag === 'audio') finish();
+    };
+    const onError = () => finish(new Error(`Failed to load ${tag} for export`));
+    const onAbort = () => finish(new Error('Export cancelled.'));
+
+    const timer = window.setTimeout(() => finish(), 6000);
+
+    signal?.addEventListener('abort', onAbort, { once: true });
+    el.addEventListener('loadeddata', onReady);
+    el.addEventListener('canplay', onReady);
+    el.addEventListener('loadedmetadata', onMeta);
+    el.addEventListener('error', onError);
+
     el.src = url;
     el.load();
+
+    if ((tag === 'audio' && el.readyState >= 1) || el.readyState >= 2) {
+      finish();
+    }
   });
 }
 
@@ -254,8 +338,12 @@ export async function exportTimelineVideo(
     startTime: optStart = 0,
     endTime: optEnd,
     onProgress,
+    onStatus,
     signal,
   } = options;
+
+  onStatus?.('preparing');
+  onProgress?.(0, 0, 1);
 
   const trackIds = new Set(tracks.map((t) => t.id));
   const trackMutedMap = new Map(tracks.map((t) => [t.id, t.muted]));
@@ -299,7 +387,11 @@ export async function exportTimelineVideo(
 
   // 2. Setup Web Audio API for mixing video/audio clips
   const audioCtx = new AudioContext();
+  if (audioCtx.state === 'suspended') {
+    await audioCtx.resume().catch(() => {});
+  }
   const audioDest = audioCtx.createMediaStreamDestination();
+  let hasAudioSource = false;
 
   // 3. Preload all clip assets (one element per clip so overlapping clips don't conflict)
   interface PreparedClip {
@@ -308,6 +400,8 @@ export async function exportTimelineVideo(
     img?: HTMLImageElement;
     video?: HTMLVideoElement;
     audio?: HTMLAudioElement;
+    audioBuffer?: AudioBuffer;
+    bufferSource?: AudioBufferSourceNode;
     gainNode?: GainNode;
     isPlaying: boolean;
   }
@@ -315,10 +409,13 @@ export async function exportTimelineVideo(
   const prepared: PreparedClip[] = [];
 
   for (const clip of activeableClips) {
+    if (signal?.aborted) {
+      if (audioCtx.state !== 'closed') void audioCtx.close();
+      throw new Error('Export cancelled.');
+    }
     const order = trackOrderMap.get(clip.trackId) ?? 0;
 
     if (clip.mediaType === 'text') {
-      // Subtitles render on top of all video/image tracks
       prepared.push({ clip, order: order + 1000, isPlaying: false });
       continue;
     }
@@ -327,12 +424,11 @@ export async function exportTimelineVideo(
     if (!media) continue;
 
     if (clip.mediaType === 'image') {
-      const img = await loadImage(media.url);
+      const img = await loadImage(media.url, signal);
       prepared.push({ clip, order, img, isPlaying: false });
     } else if (clip.mediaType === 'video') {
-      const video = await loadMediaElement<HTMLVideoElement>('video', media.url);
+      const video = await loadMediaElement<HTMLVideoElement>('video', media.url, signal);
       video.currentTime = clip.trimStart;
-      // Route video audio into Web Audio destination
       let gainNode: GainNode | undefined;
       try {
         const src = audioCtx.createMediaElementSource(video);
@@ -340,34 +436,50 @@ export async function exportTimelineVideo(
         gainNode.gain.value = clip.volume;
         src.connect(gainNode);
         gainNode.connect(audioDest);
+        hasAudioSource = true;
       } catch {
         video.muted = true;
       }
       prepared.push({ clip, order, video, gainNode, isPlaying: false });
     } else if (clip.mediaType === 'audio') {
-      const audio = await loadMediaElement<HTMLAudioElement>('audio', media.url);
-      audio.currentTime = clip.trimStart;
-      let gainNode: GainNode | undefined;
+      // Decode audio directly into an AudioBuffer for sample-accurate, autoplay-safe export mixing
+      let audioBuffer: AudioBuffer | undefined;
       try {
-        const src = audioCtx.createMediaElementSource(audio);
-        gainNode = audioCtx.createGain();
-        gainNode.gain.value = clip.volume;
-        src.connect(gainNode);
-        gainNode.connect(audioDest);
+        const ab = await media.file.arrayBuffer();
+        audioBuffer = await audioCtx.decodeAudioData(ab.slice(0));
+        hasAudioSource = true;
       } catch {
-        audio.muted = true;
+        // Fallback to HTMLAudioElement if decodeAudioData fails
       }
-      prepared.push({ clip, order, audio, gainNode, isPlaying: false });
+
+      if (audioBuffer) {
+        prepared.push({ clip, order, audioBuffer, isPlaying: false });
+      } else {
+        const audio = await loadMediaElement<HTMLAudioElement>('audio', media.url, signal);
+        audio.currentTime = clip.trimStart;
+        let gainNode: GainNode | undefined;
+        try {
+          const src = audioCtx.createMediaElementSource(audio);
+          gainNode = audioCtx.createGain();
+          gainNode.gain.value = clip.volume;
+          src.connect(gainNode);
+          gainNode.connect(audioDest);
+          hasAudioSource = true;
+        } catch {
+          audio.muted = true;
+        }
+        prepared.push({ clip, order, audio, gainNode, isPlaying: false });
+      }
     }
   }
 
   prepared.sort((a, b) => a.order - b.order);
 
-  // 4. Combine canvas video stream + audio stream
+  // 4. Combine canvas video stream + audio stream (only include audio track if present)
   const canvasStream = canvas.captureStream(fps);
   const combinedStream = new MediaStream([
     ...canvasStream.getVideoTracks(),
-    ...audioDest.stream.getAudioTracks(),
+    ...(hasAudioSource ? audioDest.stream.getAudioTracks() : []),
   ]);
 
   const { mimeType, extension } = getBestMimeType(format);
@@ -385,7 +497,17 @@ export async function exportTimelineVideo(
   };
 
   const cleanup = () => {
+    for (const track of canvasStream.getTracks()) {
+      track.stop();
+    }
     for (const p of prepared) {
+      if (p.bufferSource) {
+        try {
+          p.bufferSource.stop();
+        } catch {
+          // ignore if already stopped
+        }
+      }
       if (p.video) {
         p.video.pause();
         p.video.src = '';
@@ -401,12 +523,13 @@ export async function exportTimelineVideo(
   };
 
   return new Promise<ExportResult>((resolve, reject) => {
-    let rafId = 0;
+    let timerId = 0;
     let cancelled = false;
+    let finishing = false;
 
     const handleAbort = () => {
       cancelled = true;
-      cancelAnimationFrame(rafId);
+      window.clearInterval(timerId);
       if (recorder.state !== 'inactive') {
         recorder.stop();
       }
@@ -424,6 +547,7 @@ export async function exportTimelineVideo(
 
     recorder.onstop = () => {
       if (signal) signal.removeEventListener('abort', handleAbort);
+      window.clearInterval(timerId);
       cleanup();
       if (cancelled) return;
 
@@ -441,17 +565,52 @@ export async function exportTimelineVideo(
 
     recorder.onerror = () => {
       if (signal) signal.removeEventListener('abort', handleAbort);
-      cancelAnimationFrame(rafId);
+      window.clearInterval(timerId);
       cleanup();
       reject(new Error('MediaRecorder encountered an error while exporting.'));
     };
 
     // Start recording & real-time render loop
+    onStatus?.('rendering');
+    if (audioCtx.state === 'suspended') {
+      void audioCtx.resume();
+    }
+
+    // Schedule decoded AudioBuffer clips accurately onto the Web Audio destination
+    const audioStartTime = audioCtx.currentTime + 0.02;
+    for (const item of prepared) {
+      if (!item.audioBuffer) continue;
+      const { clip } = item;
+      const clipStart = clip.startTime;
+      const clipEnd = clip.startTime + clip.duration;
+      const overlapStart = Math.max(rangeStart, clipStart);
+      const overlapEnd = Math.min(rangeEnd, clipEnd);
+      if (overlapEnd <= overlapStart) continue;
+
+      const delay = overlapStart - rangeStart;
+      const offset = clip.trimStart + (overlapStart - clipStart);
+      const playDuration = Math.min(
+        overlapEnd - overlapStart,
+        Math.max(0, item.audioBuffer.duration - offset)
+      );
+      if (playDuration <= 0) continue;
+
+      const source = audioCtx.createBufferSource();
+      source.buffer = item.audioBuffer;
+      const gain = audioCtx.createGain();
+      gain.gain.value = Math.max(0, Math.min(1, clip.volume));
+      source.connect(gain);
+      gain.connect(audioDest);
+      source.start(audioStartTime + delay, offset, playDuration);
+      item.bufferSource = source;
+      item.gainNode = gain;
+    }
+
     recorder.start(200);
     const startWallTime = performance.now();
 
     const renderFrame = () => {
-      if (cancelled) return;
+      if (cancelled || finishing) return;
       const elapsedSec = (performance.now() - startWallTime) / 1000;
       const timelineSec = rangeStart + elapsedSec;
 
@@ -475,10 +634,31 @@ export async function exportTimelineVideo(
             left: clip.cropLeft,
           };
 
+          const transition =
+            clip.transitionIn && clip.transitionIn.duration > 0
+              ? {
+                  type: clip.transitionIn.type,
+                  progress: Math.min(
+                    1,
+                    Math.max(
+                      0,
+                      (timelineSec - clip.startTime) /
+                        Math.min(clip.transitionIn.duration, clip.duration)
+                    )
+                  ),
+                }
+              : undefined;
+
+          const transform = {
+            scale: clip.scale,
+            posX: clip.posX,
+            posY: clip.posY,
+          };
+
           if (clip.mediaType === 'text') {
             drawSubtitle(ctx, clip, width, height);
           } else if (item.img) {
-            drawContain(ctx, item.img, width, height, clip.opacity, crop);
+            drawContain(ctx, item.img, width, height, clip.opacity, crop, transition, transform);
           } else if (item.video) {
             if (!item.isPlaying) {
               item.video.currentTime = mediaTime;
@@ -487,7 +667,7 @@ export async function exportTimelineVideo(
             } else if (Math.abs(item.video.currentTime - mediaTime) > 0.3) {
               item.video.currentTime = mediaTime;
             }
-            drawContain(ctx, item.video, width, height, clip.opacity, crop);
+            drawContain(ctx, item.video, width, height, clip.opacity, crop, transition, transform);
           } else if (item.audio) {
             if (!item.isPlaying) {
               item.audio.currentTime = mediaTime;
@@ -513,17 +693,24 @@ export async function exportTimelineVideo(
       onProgress?.(pct, Math.min(elapsedSec, totalDuration), totalDuration);
 
       if (elapsedSec >= totalDuration) {
+        finishing = true;
+        window.clearInterval(timerId);
         onProgress?.(100, totalDuration, totalDuration);
-        if (recorder.state !== 'inactive') {
+        onStatus?.('finalizing');
+        if (recorder.state === 'recording') {
+          try {
+            recorder.requestData();
+          } catch {
+            // ignore if unsupported
+          }
           recorder.stop();
         }
-        return;
       }
-
-      rafId = requestAnimationFrame(renderFrame);
     };
 
-    rafId = requestAnimationFrame(renderFrame);
+    renderFrame();
+    const frameIntervalMs = Math.max(16, Math.round(1000 / Math.min(fps, 60)));
+    timerId = window.setInterval(renderFrame, frameIntervalMs);
   });
 }
 

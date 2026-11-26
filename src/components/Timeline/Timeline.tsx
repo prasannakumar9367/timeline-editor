@@ -60,10 +60,11 @@ export default function Timeline() {
     [clips, selectedClipId]
   );
 
+  const hasClips = clips.length > 0;
   const contentDuration = useMemo(() => {
-    if (clips.length === 0) return duration;
+    if (clips.length === 0) return 0;
     return Math.max(...clips.map((c) => c.startTime + c.duration));
-  }, [clips, duration]);
+  }, [clips]);
 
   const canSplit = Boolean(
     selectedClip &&
@@ -214,7 +215,8 @@ export default function Timeline() {
             type="button"
             className="timeline-transport-btn"
             onClick={handleSkipBack}
-            title="Previous cut / Jump to start"
+            disabled={!hasClips}
+            title={hasClips ? 'Previous cut / Jump to start' : 'Upload media to play'}
             aria-label="Skip back"
           >
             <SkipBackIcon size={14} />
@@ -223,7 +225,14 @@ export default function Timeline() {
             type="button"
             className={`timeline-play-circle-btn ${isPlaying ? 'playing' : ''}`}
             onClick={togglePlay}
-            title={isPlaying ? 'Pause (Space)' : 'Play (Space)'}
+            disabled={!hasClips}
+            title={
+              !hasClips
+                ? 'Upload media to the timeline to play'
+                : isPlaying
+                ? 'Pause (Space)'
+                : 'Play (Space)'
+            }
             aria-label={isPlaying ? 'Pause' : 'Play'}
           >
             {isPlaying ? <PauseIcon size={15} /> : <PlayIcon size={15} />}
@@ -232,7 +241,8 @@ export default function Timeline() {
             type="button"
             className="timeline-transport-btn"
             onClick={handleSkipForward}
-            title="Next cut / Jump to end"
+            disabled={!hasClips}
+            title={hasClips ? 'Next cut / Jump to end' : 'Upload media to play'}
             aria-label="Skip forward"
           >
             <SkipForwardIcon size={14} />

@@ -31,12 +31,20 @@ export function usePlayback() {
       setFps(Math.round(avg));
     }
 
-    // Advance time
-    const { currentTime } = useEditorStore.getState();
+    // Advance time and stop cleanly at the end of the last active clip
+    const { currentTime, clips, tracks } = useEditorStore.getState();
+    const mutedTrackIds = new Set(tracks.filter((t) => t.muted).map((t) => t.id));
+    const activeClips = clips.filter((c) => !mutedTrackIds.has(c.trackId));
+    const contentEnd =
+      activeClips.length > 0
+        ? Math.max(...activeClips.map((c) => c.startTime + c.duration))
+        : duration;
+
     const next = currentTime + delta;
-    if (next >= duration) {
-      setCurrentTime(0);
+    if (next >= contentEnd) {
+      setCurrentTime(contentEnd);
       pause();
+      return;
     } else {
       setCurrentTime(next);
     }

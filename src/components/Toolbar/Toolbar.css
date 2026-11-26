@@ -463,6 +463,24 @@
   background-color: rgba(34, 197, 94, 0.14) !important;
 }
 
+.toolbar-preview-btn {
+  height: 30px;
+  padding: 0 11px;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  background-color: #282a30;
+  border-color: #3d4049;
+  color: #e5e7eb;
+  white-space: nowrap;
+}
+
+.toolbar-preview-btn:hover:not(:disabled) {
+  background-color: #32353e;
+  border-color: #4a9eff;
+  color: #ffffff;
+}
+
 .toolbar-export-btn {
   height: 30px;
   padding: 0 12px;
@@ -496,6 +514,42 @@
 .toolbar-subtitle-btn:hover:not(:disabled) {
   background-color: rgba(249, 115, 22, 0.24);
   border-color: #fb923c;
+  color: #ffffff;
+}
+
+.toolbar-tts-btn {
+  height: 28px;
+  padding: 0 10px;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  border-color: rgba(6, 182, 212, 0.55);
+  color: #67e8f9;
+  background-color: rgba(6, 182, 212, 0.12);
+}
+
+.toolbar-tts-btn:hover:not(:disabled) {
+  background-color: rgba(6, 182, 212, 0.24);
+  border-color: #22d3ee;
+  color: #ffffff;
+}
+
+.toolbar-record-btn {
+  height: 28px;
+  padding: 0 10px;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  border-color: rgba(239, 68, 68, 0.55);
+  color: #fca5a5;
+  background-color: rgba(239, 68, 68, 0.12);
+}
+
+.toolbar-record-btn:hover:not(:disabled) {
+  background-color: rgba(239, 68, 68, 0.24);
+  border-color: #f87171;
   color: #ffffff;
 }
 

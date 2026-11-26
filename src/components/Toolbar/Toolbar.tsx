@@ -12,6 +12,9 @@ import {
   DownloadIcon,
   MinusIcon,
   PlusIcon,
+  PlayIcon,
+  MicIcon,
+  CameraIcon,
 } from '../Icons/Icons';
 import './Toolbar.css';
 
@@ -41,10 +44,18 @@ export default function Toolbar({ fps = 60 }: ToolbarProps) {
   const setZoom = useEditorStore((s) => s.setZoom);
   const toggleSnap = useEditorStore((s) => s.toggleSnap);
   const saveProject = useEditorStore((s) => s.saveProject);
+  const loadSavedProject = useEditorStore((s) => s.loadSavedProject);
   const openExportModal = useEditorStore((s) => s.openExportModal);
+  const openTtsModal = useEditorStore((s) => s.openTtsModal);
+  const openRecordModal = useEditorStore((s) => s.openRecordModal);
   const addSubtitle = useEditorStore((s) => s.addSubtitle);
   const undo = useEditorStore((s) => s.undo);
   const redo = useEditorStore((s) => s.redo);
+  const selectClip = useEditorStore((s) => s.selectClip);
+  const setCropMode = useEditorStore((s) => s.setCropMode);
+  const setCurrentTime = useEditorStore((s) => s.setCurrentTime);
+  const setFullPreview = useEditorStore((s) => s.setFullPreview);
+  const play = useEditorStore((s) => s.play);
 
   const [justSaved, setJustSaved] = useState(false);
 
@@ -52,6 +63,18 @@ export default function Toolbar({ fps = 60 }: ToolbarProps) {
     await saveProject();
     setJustSaved(true);
     setTimeout(() => setJustSaved(false), 2000);
+  };
+
+  const handlePreviewSaved = async () => {
+    if (clipsCount === 0) {
+      const loaded = await loadSavedProject();
+      if (!loaded) return;
+    }
+    setCropMode(false);
+    selectClip(null);
+    setFullPreview(true);
+    setCurrentTime(0);
+    play();
   };
 
   /* Zoom controls */
@@ -109,6 +132,26 @@ export default function Toolbar({ fps = 60 }: ToolbarProps) {
         >
           <TextIcon size={14} />
           <span>+ Subtitle</span>
+        </button>
+
+        <button
+          type="button"
+          className="toolbar-btn toolbar-tts-btn"
+          onClick={openTtsModal}
+          title="Generate Text-to-Speech or record microphone voiceover"
+        >
+          <MicIcon size={14} />
+          <span>TTS</span>
+        </button>
+
+        <button
+          type="button"
+          className="toolbar-btn toolbar-record-btn"
+          onClick={openRecordModal}
+          title="Record live video from camera or screen and upload to timeline"
+        >
+          <CameraIcon size={14} />
+          <span>Record</span>
         </button>
 
         <div className="toolbar-history-group" role="group" aria-label="Undo and Redo">
@@ -211,6 +254,22 @@ export default function Toolbar({ fps = 60 }: ToolbarProps) {
             {formatZoom(zoom)}
           </span>
         </div>
+
+        {/* Clean Full Preview Button */}
+        <button
+          type="button"
+          className="toolbar-btn toolbar-preview-btn"
+          onClick={handlePreviewSaved}
+          disabled={clipsCount === 0}
+          title={
+            clipsCount === 0
+              ? 'Upload media to the timeline to preview'
+              : 'Play clean full-screen preview from the start'
+          }
+        >
+          <PlayIcon size={13} />
+          <span>Preview</span>
+        </button>
 
         {/* Export Video Button */}
         <button

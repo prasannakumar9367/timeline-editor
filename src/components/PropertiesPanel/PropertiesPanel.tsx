@@ -173,6 +173,10 @@ const PropertiesPanel: React.FC = () => {
   const cropBottom = selectedClip.cropBottom ?? 0;
   const cropLeft = selectedClip.cropLeft ?? 0;
   const hasCrop = cropTop > 0 || cropRight > 0 || cropBottom > 0 || cropLeft > 0;
+  const clipScale = selectedClip.scale ?? 1;
+  const clipPosX = selectedClip.posX ?? 0;
+  const clipPosY = selectedClip.posY ?? 0;
+  const hasTransform = clipScale !== 1 || clipPosX !== 0 || clipPosY !== 0;
 
   const volumePercent = Math.round((selectedClip.volume ?? 1) * 100);
   const opacityPercent = Math.round((selectedClip.opacity ?? 1) * 100);
@@ -511,6 +515,106 @@ const PropertiesPanel: React.FC = () => {
                   }
                 />
               </div>
+            )}
+          </section>
+        )}
+
+        {/* ── 3a. Size & Position Section (Video & Image clips) ── */}
+        {isCroppable && (
+          <section className="props-section">
+            <h3 className="props-section-header">Size & Position</h3>
+
+            <div className="props-field">
+              <div className="props-field-header">
+                <label className="props-field-label" htmlFor="props-scale">
+                  Size (Scale)
+                </label>
+                <span className="props-range-value">{Math.round(clipScale * 100)}%</span>
+              </div>
+              <input
+                id="props-scale"
+                type="range"
+                min={15}
+                max={300}
+                step={1}
+                className="props-range-slider"
+                value={Math.round(clipScale * 100)}
+                onPointerDown={recordHistory}
+                onChange={(e) =>
+                  updateClip(
+                    selectedClip.id,
+                    { scale: Number(e.target.value) / 100 },
+                    { recordHistory: false }
+                  )
+                }
+              />
+            </div>
+
+            <div className="props-crop-grid">
+              <div className="props-field">
+                <div className="props-field-header">
+                  <label className="props-field-label" htmlFor="props-pos-x">
+                    X Offset
+                  </label>
+                  <span className="props-range-value">{Math.round(clipPosX)}%</span>
+                </div>
+                <input
+                  id="props-pos-x"
+                  type="range"
+                  min={-80}
+                  max={80}
+                  step={1}
+                  className="props-range-slider"
+                  value={Math.round(clipPosX)}
+                  onPointerDown={recordHistory}
+                  onChange={(e) =>
+                    updateClip(
+                      selectedClip.id,
+                      { posX: Number(e.target.value) },
+                      { recordHistory: false }
+                    )
+                  }
+                />
+              </div>
+
+              <div className="props-field">
+                <div className="props-field-header">
+                  <label className="props-field-label" htmlFor="props-pos-y">
+                    Y Offset
+                  </label>
+                  <span className="props-range-value">{Math.round(clipPosY)}%</span>
+                </div>
+                <input
+                  id="props-pos-y"
+                  type="range"
+                  min={-80}
+                  max={80}
+                  step={1}
+                  className="props-range-slider"
+                  value={Math.round(clipPosY)}
+                  onPointerDown={recordHistory}
+                  onChange={(e) =>
+                    updateClip(
+                      selectedClip.id,
+                      { posY: Number(e.target.value) },
+                      { recordHistory: false }
+                    )
+                  }
+                />
+              </div>
+            </div>
+
+            {hasTransform && (
+              <button
+                type="button"
+                className="props-btn props-btn-duplicate"
+                style={{ width: '100%' }}
+                onClick={() =>
+                  updateClip(selectedClip.id, { scale: 1, posX: 0, posY: 0 })
+                }
+              >
+                Reset Size & Position (Fit)
+              </button>
             )}
           </section>
         )}

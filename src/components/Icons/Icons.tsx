@@ -246,6 +246,28 @@ export const CropIcon: React.FC<IconProps> = ({ size = 16, className }) => (
   </svg>
 );
 
+export const TransitionIcon: React.FC<IconProps> = ({ size = 14, className }) => (
+  <svg {...baseProps(size, className)} strokeWidth={2.2}>
+    <line x1="7" y1="17" x2="17" y2="7" />
+  </svg>
+);
+
+export const MicIcon: React.FC<IconProps> = ({ size = 14, className }) => (
+  <svg {...baseProps(size, className)}>
+    <rect x="9" y="2" width="6" height="12" rx="3" />
+    <path d="M5 10v2a7 7 0 0 0 14 0v-2" />
+    <line x1="12" y1="19" x2="12" y2="22" />
+    <line x1="8" y1="22" x2="16" y2="22" />
+  </svg>
+);
+
+export const CameraIcon: React.FC<IconProps> = ({ size = 14, className }) => (
+  <svg {...baseProps(size, className)}>
+    <path d="M23 7l-7 5 7 5V7z" />
+    <rect x="1" y="5" width="15" height="14" rx="2" />
+  </svg>
+);
+
 export const MediaTypeIcon: React.FC<{
   type: MediaType | TrackType;
   size?: number;

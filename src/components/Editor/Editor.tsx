@@ -5,6 +5,8 @@ import Preview from '../Preview/Preview';
 import Timeline from '../Timeline/Timeline';
 import PropertiesPanel from '../PropertiesPanel/PropertiesPanel';
 import ExportModal from '../ExportModal/ExportModal';
+import TtsModal from '../TtsModal/TtsModal';
+import RecordModal from '../RecordModal/RecordModal';
 import { useKeyboard } from '../../hooks/useKeyboard';
 import { usePlayback } from '../../hooks/usePlayback';
 import { useEditorStore } from '../../store/editorStore';
@@ -37,6 +39,8 @@ export default function Editor() {
         <Timeline />
       </div>
       <ExportModal />
+      <TtsModal />
+      <RecordModal />
     </div>
   );
 }

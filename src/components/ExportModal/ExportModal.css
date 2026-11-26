@@ -10,7 +10,7 @@
 }
 
 .export-modal {
-  width: 440px;
+  width: 640px;
   max-width: calc(100vw - 32px);
   background-color: #202020;
   border: 1px solid #3a3a3a;

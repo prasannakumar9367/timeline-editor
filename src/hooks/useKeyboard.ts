@@ -62,7 +62,12 @@ export function useKeyboard() {
           break;
 
         case 'Escape':
-          if (useEditorStore.getState().isCropMode) {
+          if (useEditorStore.getState().isFullPreview) {
+            if (document.fullscreenElement) {
+              void document.exitFullscreen().catch(() => {});
+            }
+            useEditorStore.getState().setFullPreview(false);
+          } else if (useEditorStore.getState().isCropMode) {
             useEditorStore.getState().setCropMode(false);
           } else {
             selectClip(null);

@@ -5,7 +5,7 @@ import {
   getSupportedExportFormats,
   triggerDownload,
 } from '../../utils/exporter';
-import type { ExportFormat, ExportResult } from '../../utils/exporter';
+import type { ExportFormat, ExportResult, ExportStatus } from '../../utils/exporter';
 import { formatTime } from '../../utils/time';
 import { DownloadIcon, CloseIcon, CheckIcon } from '../Icons/Icons';
 import './ExportModal.css';
@@ -18,6 +18,7 @@ const RESOLUTIONS = [
 export default function ExportModal(): React.JSX.Element | null {
   const isOpen = useEditorStore((s) => s.isExportModalOpen);
   const closeExportModal = useEditorStore((s) => s.closeExportModal);
+  const saveProject = useEditorStore((s) => s.saveProject);
   const tracks = useEditorStore((s) => s.tracks);
   const clips = useEditorStore((s) => s.clips);
   const mediaItems = useEditorStore((s) => s.mediaItems);
@@ -28,6 +29,7 @@ export default function ExportModal(): React.JSX.Element | null {
   const [resIdx, setResIdx] = useState(0);
   const [fps, setFps] = useState(30);
   const [isExporting, setIsExporting] = useState(false);
+  const [exportStatus, setExportStatus] = useState<ExportStatus | 'done'>('preparing');
   const [progress, setProgress] = useState(0);
   const [renderedTime, setRenderedTime] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -98,7 +100,11 @@ export default function ExportModal(): React.JSX.Element | null {
     setResult(null);
     setProgress(0);
     setRenderedTime(0);
+    setExportStatus('preparing');
     setIsExporting(true);
+
+    // Save project in background so AudioContext stays inside the user click gesture
+    void saveProject();
 
     const controller = new AbortController();
     abortRef.current = controller;
@@ -114,11 +120,17 @@ export default function ExportModal(): React.JSX.Element | null {
         endTime: rangeEnd,
         filename: filename.trim() || 'my-video-edit',
         signal: controller.signal,
+        onStatus: (status) => {
+          setExportStatus(status);
+        },
         onProgress: (pct, curTime) => {
           setProgress(pct);
           setRenderedTime(curTime);
         },
       });
+      setProgress(100);
+      setRenderedTime(exportDuration);
+      setExportStatus('done');
       setResult(resData);
       triggerDownload(resData.url, resData.filename);
     } catch (err) {
@@ -293,18 +305,39 @@ export default function ExportModal(): React.JSX.Element | null {
                 <strong>{formatTime(exportDuration)}</strong>
               </div>
 
-              {isExporting && (
+              {(isExporting || result) && (
                 <div className="export-progress-box">
                   <div className="export-progress-meta">
-                    <span>Rendering video…</span>
                     <span>
+                      {exportStatus === 'preparing'
+                        ? 'Preparing media…'
+                        : exportStatus === 'rendering'
+                        ? 'Rendering video…'
+                        : exportStatus === 'finalizing'
+                        ? 'Finalizing file…'
+                        : 'Export complete'}
+                    </span>
+                    <span className="export-progress-numbers">
                       {formatTime(renderedTime)} / {formatTime(exportDuration)} ({Math.round(progress)}%)
                     </span>
                   </div>
-                  <div className="export-progress-track">
+                  <div
+                    className="export-progress-track"
+                    role="progressbar"
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={Math.round(progress)}
+                  >
                     <div
-                      className="export-progress-fill"
-                      style={{ width: `${progress}%` }}
+                      className={`export-progress-fill ${
+                        exportStatus === 'preparing' ? 'export-progress-fill--preparing' : ''
+                      } ${exportStatus === 'done' ? 'export-progress-fill--done' : ''}`}
+                      style={{
+                        width:
+                          exportStatus === 'preparing'
+                            ? '18%'
+                            : `${Math.max(0, Math.min(100, progress))}%`,
+                      }}
                     />
                   </div>
                 </div>
@@ -317,6 +350,7 @@ export default function ExportModal(): React.JSX.Element | null {
                   <video
                     src={result.url}
                     controls
+                    autoPlay
                     className="export-preview-video"
                   />
                   <div className="export-success">
@@ -329,10 +363,10 @@ export default function ExportModal(): React.JSX.Element | null {
                     </div>
                     <button
                       type="button"
-                      className="export-btn export-btn-secondary"
+                      className="export-btn export-btn-primary"
                       onClick={() => triggerDownload(result.url, result.filename)}
                     >
-                      Download Again
+                      Download Video
                     </button>
                   </div>
                 </div>
